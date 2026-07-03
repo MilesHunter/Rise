@@ -1,14 +1,5 @@
 {
   "dependencies": {
-    "com.gamebooom.unity.mcp": {
-      "version": "file:com.gamebooom.unity.mcp",
-      "depth": 0,
-      "source": "embedded",
-      "dependencies": {
-        "com.unity.nuget.newtonsoft-json": "3.2.1",
-        "com.unity.inputsystem": "1.7.0"
-      }
-    },
     "com.unity.ai.navigation": {
       "version": "2.0.13",
       "depth": 0,
