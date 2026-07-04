@@ -91,7 +91,9 @@ namespace Rise
                 return true;
             }
 
-            gripPoint = targetCollider.ClosestPoint(new Vector3(targetWorld.x, targetWorld.y, targetCollider.bounds.center.z));
+            gripPoint = CanUseClosestPoint(targetCollider)
+                ? targetCollider.ClosestPoint(new Vector3(targetWorld.x, targetWorld.y, targetCollider.bounds.center.z))
+                : GetBoundsGripPoint(targetCollider.bounds, targetWorld);
             gripPoint.z = 0f;
             return true;
         }
@@ -153,6 +155,19 @@ namespace Rise
             }
 
             return cachedCollider;
+        }
+
+        private static bool CanUseClosestPoint(Collider targetCollider)
+        {
+            return targetCollider is not MeshCollider meshCollider || meshCollider.convex;
+        }
+
+        private static Vector3 GetBoundsGripPoint(Bounds bounds, Vector3 targetWorld)
+        {
+            return new Vector3(
+                Mathf.Clamp(targetWorld.x, bounds.min.x, bounds.max.x),
+                Mathf.Clamp(targetWorld.y, bounds.min.y, bounds.max.y),
+                bounds.center.z);
         }
 
         private void OnEnable()

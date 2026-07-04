@@ -14,17 +14,22 @@ namespace Rise
 
         private void Awake()
         {
-            inventory = GetComponent<PlayerInventory>();
-            vitals = GetComponent<PlayerVitals>();
-            EnsureRecipes();
+            EnsureInitialized();
         }
 
         public bool TryCook(int index)
         {
+            EnsureInitialized();
             EnsureRecipes();
             if (index < 0 || index >= recipes.Count)
             {
                 LastMessage = "No recipe selected";
+                return false;
+            }
+
+            if (inventory == null || vitals == null)
+            {
+                LastMessage = "Cooking requires player inventory and vitals";
                 return false;
             }
 
@@ -40,6 +45,26 @@ namespace Rise
             inventory.NotifyChanged();
             LastMessage = $"Cooked {recipe.DisplayName}";
             return true;
+        }
+
+        private void EnsureInitialized()
+        {
+            if (inventory == null)
+            {
+                inventory = GetComponent<PlayerInventory>();
+            }
+
+            if (vitals == null)
+            {
+                vitals = GetComponent<PlayerVitals>();
+            }
+
+            if (inventory != null)
+            {
+                inventory.EnsureInitialized();
+            }
+
+            EnsureRecipes();
         }
 
         private void EnsureRecipes()

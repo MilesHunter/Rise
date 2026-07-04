@@ -13,6 +13,8 @@ namespace Rise.Editor
     {
         private const string ScenePath = "Assets/Scenes/Mountain.unity";
         private const string LongClimbScenePath = "Assets/Scenes/MountainLongClimb.unity";
+        private const string FinalPlayableScenePath = "Assets/Scenes/FinalPlayable.unity";
+        private const string CharacterModelPath = "Assets/Arts/CharacterModels/Character.fbx";
         private const string RootName = "RisePrototypeWorld";
         private const float LongClimbWallCenterX = 0f;
         private const float LongClimbWallCenterY = 55f;
@@ -89,7 +91,7 @@ namespace Rise.Editor
             BuildBackdrop(levelRoot.transform);
             BuildRoute(levelRoot.transform);
             PlayerClimbController player = BuildPlayer(root.transform);
-            BuildHud(root.transform);
+            BuildHud(root.transform, player);
             ConfigureCamera(player.transform);
 
             EditorSceneManager.MarkSceneDirty(scene);
@@ -101,18 +103,53 @@ namespace Rise.Editor
         [MenuItem("Rise/Author Mountain Long Climb Scene")]
         public static void ApplyToMountainLongClimbScene()
         {
-            if (File.Exists(Path.Combine(Application.dataPath, "..", LongClimbScenePath)))
+            AuthorLongClimbScene(LongClimbScenePath, false);
+        }
+
+        [MenuItem("Rise/Author Final Playable Scene")]
+        public static void ApplyToFinalPlayableScene()
+        {
+            AuthorFinalPlayableFromExistingLongClimb();
+        }
+
+        public static void ApplyToFinalPlayableSceneBatch()
+        {
+            try
             {
-                AssetDatabase.DeleteAsset(LongClimbScenePath);
+                ApplyToFinalPlayableScene();
+                if (Application.isBatchMode)
+                {
+                    EditorApplication.Exit(0);
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogException(exception);
+                if (Application.isBatchMode)
+                {
+                    EditorApplication.Exit(1);
+                }
+                else
+                {
+                    throw;
+                }
+            }
+        }
+
+        private static void AuthorLongClimbScene(string targetScenePath, bool registerAsBuildEntry)
+        {
+            if (File.Exists(Path.Combine(Application.dataPath, "..", targetScenePath)))
+            {
+                AssetDatabase.DeleteAsset(targetScenePath);
             }
 
-            if (!AssetDatabase.CopyAsset(ScenePath, LongClimbScenePath))
+            if (!AssetDatabase.CopyAsset(ScenePath, targetScenePath))
             {
-                throw new InvalidOperationException($"Unable to copy {ScenePath} to {LongClimbScenePath}");
+                throw new InvalidOperationException($"Unable to copy {ScenePath} to {targetScenePath}");
             }
 
             AssetDatabase.Refresh();
-            Scene scene = EditorSceneManager.OpenScene(LongClimbScenePath, OpenSceneMode.Single);
+            Scene scene = EditorSceneManager.OpenScene(targetScenePath, OpenSceneMode.Single);
 
             RemoveExistingPrototype(scene);
             RemoveGeneratedLongClimbObjects(scene);
@@ -126,14 +163,200 @@ namespace Rise.Editor
             BuildLongClimbRoute(levelRoot.transform);
             PlayerClimbController player = BuildPlayer(root.transform);
             player.transform.position = new Vector3(-5.6f, 0.35f, 0f);
-            BuildHud(root.transform);
+            BuildHud(root.transform, player);
             ConfigureCamera(player.transform);
 
             ValidateLongClimbRocks(levelRoot.transform);
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
+            if (registerAsBuildEntry)
+            {
+                SetOnlyBuildScene(targetScenePath);
+            }
             AssetDatabase.SaveAssets();
-            Debug.Log($"Mountain long climb scene authored successfully: {LongClimbScenePath}");
+            Debug.Log($"Mountain long climb scene authored successfully: {targetScenePath}");
+        }
+
+        private static void AuthorFinalPlayableFromExistingLongClimb()
+        {
+            if (!File.Exists(Path.Combine(Application.dataPath, "..", LongClimbScenePath)))
+            {
+                throw new FileNotFoundException($"Missing finished long-climb scene at {LongClimbScenePath}");
+            }
+
+            if (File.Exists(Path.Combine(Application.dataPath, "..", FinalPlayableScenePath)))
+            {
+                AssetDatabase.DeleteAsset(FinalPlayableScenePath);
+            }
+
+            if (!AssetDatabase.CopyAsset(LongClimbScenePath, FinalPlayableScenePath))
+            {
+                throw new InvalidOperationException($"Unable to copy {LongClimbScenePath} to {FinalPlayableScenePath}");
+            }
+
+            AssetDatabase.Refresh();
+            Scene scene = EditorSceneManager.OpenScene(FinalPlayableScenePath, OpenSceneMode.Single);
+            EnsureFinalPlayableSystems(scene);
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            SetOnlyBuildScene(FinalPlayableScenePath);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"Final playable scene copied from finished map and integrated: {FinalPlayableScenePath}");
+        }
+
+        private static void EnsureFinalPlayableSystems(Scene scene)
+        {
+            GameObject root = FindRoot(scene, RootName);
+            if (root == null)
+            {
+                root = new GameObject(RootName);
+            }
+
+            EnsureRockwallCollider(root.transform);
+            PlayerClimbController player = Object.FindAnyObjectByType<PlayerClimbController>();
+            if (player == null)
+            {
+                player = BuildPlayer(root.transform);
+                player.transform.position = new Vector3(-5.6f, 0.35f, 0f);
+            }
+            else
+            {
+                EnsurePlayerComponents(player, root.transform);
+            }
+
+            EnsureCameraForLongClimb();
+            ConfigureCamera(player.transform);
+            EnsureHudAndInventoryUi(root.transform, player);
+        }
+
+        private static GameObject FindRoot(Scene scene, string rootName)
+        {
+            foreach (GameObject rootObject in scene.GetRootGameObjects())
+            {
+                if (rootObject.name == rootName)
+                {
+                    return rootObject;
+                }
+            }
+
+            return null;
+        }
+
+        private static void EnsurePlayerComponents(PlayerClimbController player, Transform generatedRoot)
+        {
+            if (player.GetComponent<PlayerVitals>() == null)
+            {
+                player.gameObject.AddComponent<PlayerVitals>();
+            }
+
+            if (player.GetComponent<PlayerInventory>() == null)
+            {
+                player.gameObject.AddComponent<PlayerInventory>();
+            }
+
+            if (player.GetComponent<RestSessionController>() == null)
+            {
+                player.gameObject.AddComponent<RestSessionController>();
+            }
+
+            if (player.GetComponent<CookingSystem>() == null)
+            {
+                player.gameObject.AddComponent<CookingSystem>();
+            }
+
+            if (player.GetComponent<ToolController>() == null)
+            {
+                player.gameObject.AddComponent<ToolController>();
+            }
+
+            if (player.GetComponent<PlayerAudioBridge>() == null)
+            {
+                player.gameObject.AddComponent<PlayerAudioBridge>();
+            }
+
+            player.Initialize(Camera.main, player.transform.position, generatedRoot);
+            EnsureCharacterPresentation(player);
+        }
+
+        private static void EnsureCharacterPresentation(PlayerClimbController player)
+        {
+            CharacterPresentation presentation = player.GetComponentInChildren<CharacterPresentation>(true);
+            if (presentation == null)
+            {
+                GameObject presentationObject = new GameObject("CharacterPresentation");
+                presentationObject.transform.SetParent(player.transform, false);
+                presentation = presentationObject.AddComponent<CharacterPresentation>();
+            }
+            else if (presentation.transform.parent != player.transform)
+            {
+                presentation.transform.SetParent(player.transform, false);
+            }
+
+            EnsureCharacterModelInstance(presentation.transform);
+            presentation.Initialize(player);
+
+            foreach (CharacterPresentation other in Object.FindObjectsByType<CharacterPresentation>(FindObjectsInactive.Include))
+            {
+                if (other != presentation)
+                {
+                    Object.DestroyImmediate(other.gameObject);
+                }
+            }
+        }
+
+        private static void EnsureCharacterModelInstance(Transform presentationRoot)
+        {
+            if (presentationRoot.Find("CharacterVisual") != null)
+            {
+                return;
+            }
+
+            GameObject prefab = AssetDatabase.LoadAssetAtPath<GameObject>(CharacterModelPath);
+            if (prefab == null)
+            {
+                Debug.LogWarning($"Missing character model at {CharacterModelPath}");
+                return;
+            }
+
+            GameObject visual = (GameObject)PrefabUtility.InstantiatePrefab(prefab, presentationRoot.gameObject.scene);
+            visual.name = "CharacterVisual";
+            visual.transform.SetParent(presentationRoot, false);
+            visual.transform.localPosition = Vector3.zero;
+            visual.transform.localRotation = Quaternion.identity;
+            visual.transform.localScale = Vector3.one;
+
+            foreach (Camera camera in visual.GetComponentsInChildren<Camera>(true))
+            {
+                Object.DestroyImmediate(camera.gameObject);
+            }
+
+            foreach (Light light in visual.GetComponentsInChildren<Light>(true))
+            {
+                Object.DestroyImmediate(light.gameObject);
+            }
+        }
+
+        private static void EnsureHudAndInventoryUi(Transform parent, PlayerClimbController player)
+        {
+            GameHUDPresenter hud = Object.FindAnyObjectByType<GameHUDPresenter>(FindObjectsInactive.Include);
+            if (hud == null)
+            {
+                GameObject hudObject = new GameObject("HUD");
+                hudObject.transform.SetParent(parent, false);
+                hud = hudObject.AddComponent<GameHUDPresenter>();
+            }
+
+            hud.Initialize(player);
+
+            InventoryUI inventoryUi = Object.FindAnyObjectByType<InventoryUI>(FindObjectsInactive.Include);
+            if (inventoryUi == null)
+            {
+                GameObject inventoryObject = new GameObject("InventoryAndRestUI");
+                inventoryObject.transform.SetParent(parent, false);
+                inventoryUi = inventoryObject.AddComponent<InventoryUI>();
+            }
+
+            inventoryUi.Initialize(player);
         }
 
         private static Scene ResolveTargetScene()
@@ -245,7 +468,8 @@ namespace Rise.Editor
             rockwall.transform.position = new Vector3(LongClimbWallCenterX, LongClimbWallCenterY, 0.18f);
             rockwall.transform.localScale = new Vector3(LongClimbWallWidth, LongClimbWallHeight, 0.12f);
             rockwall.GetComponent<Renderer>().sharedMaterial.color = new Color(0.2f, 0.23f, 0.24f);
-            Object.DestroyImmediate(rockwall.GetComponent<BoxCollider>());
+            BoxCollider collider = rockwall.GetComponent<BoxCollider>();
+            collider.isTrigger = true;
         }
 
         private static void BuildLongClimbRoute(Transform parent)
@@ -654,19 +878,47 @@ namespace Rise.Editor
             playerObject.AddComponent<PlayerInventory>();
             playerObject.AddComponent<RestSessionController>();
             playerObject.AddComponent<CookingSystem>();
-            playerObject.AddComponent<ToolController>();
-            return playerObject.AddComponent<PlayerClimbController>();
+            ToolController toolController = playerObject.AddComponent<ToolController>();
+            PlayerClimbController controller = playerObject.AddComponent<PlayerClimbController>();
+            playerObject.AddComponent<PlayerAudioBridge>();
+            controller.Initialize(Camera.main, playerObject.transform.position, parent);
+
+            toolController.ToolPlaced += (toolKind, position) =>
+            {
+                AudioService service = AudioService.Instance;
+                if (service == null)
+                {
+                    return;
+                }
+
+                service.Play3D(toolKind == ToolKind.Anchor ? AudioCueId.AnchorPlace : AudioCueId.RopePlace, position);
+            };
+
+            GameObject presentationObject = new GameObject("CharacterPresentation");
+            presentationObject.transform.SetParent(playerObject.transform, false);
+            CharacterPresentation presentation = presentationObject.AddComponent<CharacterPresentation>();
+            EnsureCharacterModelInstance(presentationObject.transform);
+            presentation.Initialize(controller);
+            return controller;
         }
 
-        private static void BuildHud(Transform parent)
+        private static void BuildHud(Transform parent, PlayerClimbController player)
         {
             GameObject hud = new GameObject("HUD");
             hud.transform.SetParent(parent, false);
-            hud.AddComponent<GameHUDPresenter>();
+            GameHUDPresenter presenter = hud.AddComponent<GameHUDPresenter>();
+            if (player != null)
+            {
+                presenter.Initialize(player);
+            }
 
             GameObject inventoryUi = new GameObject("InventoryAndRestUI");
             inventoryUi.transform.SetParent(parent, false);
-            inventoryUi.AddComponent<InventoryUI>();
+            InventoryUI inventory = inventoryUi.AddComponent<InventoryUI>();
+            if (player != null)
+            {
+                inventory.Initialize(player);
+            }
         }
 
         private static void ConfigureCamera(Transform player)
@@ -788,6 +1040,33 @@ namespace Rise.Editor
             collider.isTrigger = true;
 
             goal.AddComponent<GoalPoint>();
+        }
+
+        private static void SetOnlyBuildScene(string scenePath)
+        {
+            EditorBuildSettings.scenes = new[]
+            {
+                new EditorBuildSettingsScene(scenePath, true)
+            };
+        }
+
+        private static void EnsureRockwallCollider(Transform root)
+        {
+            Transform wall = root.Find("Level/LongClimbRockwall");
+            if (wall == null)
+            {
+                return;
+            }
+
+            BoxCollider collider = wall.GetComponent<BoxCollider>();
+            if (collider == null)
+            {
+                collider = wall.gameObject.AddComponent<BoxCollider>();
+            }
+
+            collider.isTrigger = true;
+            collider.center = Vector3.zero;
+            collider.size = Vector3.one;
         }
     }
 }

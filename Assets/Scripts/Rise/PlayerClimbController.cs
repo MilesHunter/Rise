@@ -13,7 +13,7 @@ namespace Rise
     [RequireComponent(typeof(PlayerInventory))]
     public sealed class PlayerClimbController : MonoBehaviour
     {
-        [SerializeField] private float holdReach = 2.75f;
+        [SerializeField] private float holdReach = 3.25f;
         [SerializeField] private float holdSpringStrength = 55f;
         [SerializeField] private float holdSpringDamping = 7f;
         [SerializeField] private float mouseDeltaWorldScale = 0.015f;
@@ -24,10 +24,12 @@ namespace Rise
         [SerializeField] private float fallY = -4f;
         [SerializeField] private float restDuration = 1.15f;
         [SerializeField] private float surfaceGrabTolerance = 0.9f;
-        [SerializeField] private float handReachLimit = 2.35f;
+        [SerializeField] private float handReachLimit = 3.25f;
+        [SerializeField] private float freeHandReachWhenOtherHandHeld = 6f;
+        [SerializeField] private Vector3 leftCursorHandOffset = new Vector3(-0.48f, 0.12f, 0f);
+        [SerializeField] private Vector3 rightCursorHandOffset = new Vector3(0.48f, 0.12f, 0f);
         [SerializeField] private Vector3 leftFreeHandRestOffset = new Vector3(-0.75f, 0.25f, 0f);
         [SerializeField] private Vector3 rightFreeHandRestOffset = new Vector3(0.75f, 0.25f, 0f);
-        [SerializeField] private float freeHandReturnSpeed = 8f;
         [SerializeField] private Vector3 leftFootSupportOffset = new Vector3(-0.22f, -0.95f, 0f);
         [SerializeField] private Vector3 rightFootSupportOffset = new Vector3(0.22f, -0.95f, 0f);
         [SerializeField] private float footSupportHorizontalReach = 0.55f;
@@ -49,6 +51,7 @@ namespace Rise
         private bool restFrozen;
         private AudioCueId activeBreathingCue;
         private bool cursorLocked;
+        private RestSessionController restSession;
 
         public HandState LeftHand { get; } = new HandState { DisplayName = "Left", IsLeft = true, LocalAnchorOffset = new Vector3(-0.45f, 0.55f, 0f) };
         public HandState RightHand { get; } = new HandState { DisplayName = "Right", IsLeft = false, LocalAnchorOffset = new Vector3(0.45f, 0.55f, 0f) };
@@ -249,18 +252,18 @@ namespace Rise
             if (pressed)
             {
                 hand.IsPressed = true;
-                Vector3 targetWorld = hand.WorldTarget;
+                Vector3 targetWorld = GetHandGrabProbeWorld(hand);
                 ClimbHold hoveredHold = FindHoveredHold(targetWorld);
-                ClimbSurface hoveredSurface = hoveredHold == null ? FindHoveredSurface(targetWorld) : null;
-                ClimbHold surfaceGrip = hoveredHold == null ? CreateSurfaceGrip(targetWorld) : null;
+                ClimbSurface hoveredSurface = FindHoveredSurface(targetWorld);
+                ClimbHold surfaceGrip = hoveredSurface != null ? CreateSurfaceGrip(targetWorld) : null;
 
-                if (Tools.TryUseTool(targetWorld, hoveredHold, hoveredSurface))
+                if (Tools != null && Tools.TryUseTool(targetWorld, hoveredHold, hoveredSurface))
                 {
                     ReleaseRuntimeHoldIfNeeded(surfaceGrip);
                     return;
                 }
 
-                TryGrabHand(hand, hoveredHold, surfaceGrip);
+                TryGrabHand(hand, surfaceGrip == null ? hoveredHold : null, surfaceGrip);
             }
 
             if (released)
@@ -321,12 +324,12 @@ namespace Rise
             if (targetHold == null)
             {
                 hand.State = HandGrabState.Reach;
-                GrabFailed?.Invoke(hand, hand.WorldTarget);
+                GrabFailed?.Invoke(hand, GetHandGrabProbeWorld(hand));
                 return;
             }
 
             Vector3 anchor = transform.position + hand.LocalAnchorOffset;
-            if (Vector3.Distance(anchor, targetHold.Position) > holdReach)
+            if (Vector3.Distance(anchor, targetHold.Position) > GetHoldReach(hand))
             {
                 hand.State = HandGrabState.Reach;
                 ReleaseRuntimeHoldIfNeeded(surfaceGrip);
@@ -417,6 +420,12 @@ namespace Rise
 
             if (Keyboard.current.fKey.wasPressedThisFrame)
             {
+                if (restSession != null)
+                {
+                    restSession.BeginRest(currentRestPoint);
+                    return;
+                }
+
                 restRoutine = StartCoroutine(PerformRest(currentRestPoint));
             }
         }
@@ -480,7 +489,7 @@ namespace Rise
                 return;
             }
 
-            Vector3 anchorWorld = transform.position + hand.LocalAnchorOffset;
+            Vector3 anchorWorld = GetHoldForceAnchorWorld(hand);
             Vector3 desiredAnchorWorld = GetDesiredAnchorWorld(hand);
             Vector3 delta = desiredAnchorWorld - anchorWorld;
             Vector3 velocityAtAnchor = body.GetPointVelocity(anchorWorld);
@@ -658,12 +667,10 @@ namespace Rise
         {
             if (pointerMode)
             {
-                return GetReachLimitedTarget(hand, CursorWorld);
+                return GetReachLimitedTarget(hand, GetCursorHandTarget(hand));
             }
 
-            Vector3 target = hand.IsPressed
-                ? hand.WorldTarget
-                : Vector3.MoveTowards(hand.WorldTarget, GetFreeHandRestTarget(hand), freeHandReturnSpeed * Time.deltaTime);
+            Vector3 target = Mouse.current != null ? GetCursorHandTarget(hand) : GetFreeHandRestTarget(hand);
             return GetReachLimitedTarget(hand, target);
         }
 
@@ -827,16 +834,40 @@ namespace Rise
             Vector3 shoulder = transform.position + hand.LocalAnchorOffset;
             Vector3 offset = desiredTarget - shoulder;
             offset.z = 0f;
+            float reachLimit = GetReachLimit(hand);
 
-            if (offset.sqrMagnitude <= handReachLimit * handReachLimit)
+            if (offset.sqrMagnitude <= reachLimit * reachLimit)
             {
                 desiredTarget.z = movePlaneZ;
                 return desiredTarget;
             }
 
-            Vector3 limited = shoulder + offset.normalized * handReachLimit;
+            Vector3 limited = shoulder + offset.normalized * reachLimit;
             limited.z = movePlaneZ;
             return limited;
+        }
+
+        private float GetReachLimit(HandState hand)
+        {
+            bool oppositeHandHeld = hand.IsLeft ? RightHand.HasHold : LeftHand.HasHold;
+            return !hand.HasHold && oppositeHandHeld ? freeHandReachWhenOtherHandHeld : handReachLimit;
+        }
+
+        private float GetHoldReach(HandState hand)
+        {
+            return Mathf.Max(holdReach, GetReachLimit(hand));
+        }
+
+        private Vector3 GetHandGrabProbeWorld(HandState hand)
+        {
+            Vector3 probe = hand.HasVisibleWorldPoint ? hand.VisibleWorldPoint : hand.WorldTarget;
+            probe.z = movePlaneZ;
+            return probe;
+        }
+
+        private Vector3 GetHoldForceAnchorWorld(HandState hand)
+        {
+            return hand.HasVisibleWorldPoint ? GetHandGrabProbeWorld(hand) : transform.position + hand.LocalAnchorOffset;
         }
 
         private Vector3 GetDesiredAnchorWorld(HandState hand)
@@ -891,11 +922,19 @@ namespace Rise
             return target;
         }
 
+        private Vector3 GetCursorHandTarget(HandState hand)
+        {
+            Vector3 target = CursorWorld + (hand.IsLeft ? leftCursorHandOffset : rightCursorHandOffset);
+            target.z = movePlaneZ;
+            return target;
+        }
+
         private void EnsureInitialized(Transform generatedRoot)
         {
             body = GetComponent<Rigidbody>();
             Vitals = GetComponent<PlayerVitals>();
             Tools = GetComponent<ToolController>();
+            restSession = GetComponent<RestSessionController>();
             Inventory = GetComponent<PlayerInventory>();
             if (Inventory == null)
             {
@@ -944,6 +983,18 @@ namespace Rise
         public Vector3 GetHandAnchorWorld(HandState hand)
         {
             return transform.position + hand.LocalAnchorOffset;
+        }
+
+        public void SetVisibleHandWorldPoint(HandState hand, Vector3 worldPoint)
+        {
+            if (hand == null)
+            {
+                return;
+            }
+
+            worldPoint.z = movePlaneZ;
+            hand.VisibleWorldPoint = worldPoint;
+            hand.HasVisibleWorldPoint = true;
         }
 
         public void BeginRestFreeze(RestPoint restPoint)
