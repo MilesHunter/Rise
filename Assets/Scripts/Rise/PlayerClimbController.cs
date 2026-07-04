@@ -35,6 +35,7 @@ namespace Rise
         private bool hasWon;
         private bool initialized;
         private AudioCueId activeBreathingCue;
+        private bool cursorLocked;
 
         public HandState LeftHand { get; } = new HandState { DisplayName = "Left", IsLeft = true, LocalAnchorOffset = new Vector3(-0.45f, 0.55f, 0f) };
         public HandState RightHand { get; } = new HandState { DisplayName = "Right", IsLeft = false, LocalAnchorOffset = new Vector3(0.45f, 0.55f, 0f) };
@@ -71,6 +72,21 @@ namespace Rise
         {
             EnsureInitialized(transform.parent != null ? transform.parent : transform);
             body.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+        }
+
+        private void OnEnable()
+        {
+            SetCursorLock(true);
+        }
+
+        private void OnDisable()
+        {
+            SetCursorLock(false);
+        }
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            SetCursorLock(hasFocus);
         }
 
         private void Update()
@@ -134,6 +150,11 @@ namespace Rise
             if (mainCamera == null)
             {
                 mainCamera = Camera.main;
+            }
+
+            if (!cursorLocked)
+            {
+                SetCursorLock(true);
             }
 
             Vector2 mousePosition = Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
@@ -731,6 +752,21 @@ namespace Rise
             }
 
             return null;
+        }
+
+        private void SetCursorLock(bool shouldLock)
+        {
+            cursorLocked = shouldLock;
+
+            if (shouldLock)
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+                return;
+            }
+
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
         }
     }
 }

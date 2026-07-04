@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Rise
 {
@@ -9,7 +10,9 @@ namespace Rise
         private static readonly List<ClimbSurface> ActiveSurfacesInternal = new List<ClimbSurface>();
         private const float DefaultGripProbeDepth = 4f;
 
-        [SerializeField] private string surfaceLabel = "Rock";
+        [SerializeField] private ClimbSurfaceLabelPreset surfaceLabelPreset = ClimbSurfaceLabelPreset.Rock;
+        [FormerlySerializedAs("surfaceLabel")]
+        [SerializeField] private string customSurfaceLabel = string.Empty;
         [SerializeField] private SurfaceAudioProfile surfaceAudio;
         [SerializeField] private float grabCost = 2f;
         [SerializeField] private float holdDrainPerSecond = 1f;
@@ -23,7 +26,7 @@ namespace Rise
 
         public static IReadOnlyList<ClimbSurface> ActiveSurfaces => ActiveSurfacesInternal;
 
-        public string SurfaceLabel => surfaceLabel;
+        public string SurfaceLabel => ResolveSurfaceLabel();
         public SurfaceAudioProfile SurfaceAudio => surfaceAudio;
         public float GrabCost => grabCost;
         public float HoldDrainPerSecond => holdDrainPerSecond;
@@ -34,13 +37,44 @@ namespace Rise
 
         public void Configure(string label, float initialGrabCost, float drainPerSecond, float interval, float chanceToSlip, bool canAnchor, bool canRope)
         {
-            surfaceLabel = label;
+            customSurfaceLabel = label;
+            surfaceLabelPreset = ClimbSurfaceLabelPreset.Custom;
             grabCost = initialGrabCost;
             holdDrainPerSecond = drainPerSecond;
             slipCheckInterval = interval;
             slipChance = chanceToSlip;
             allowAnchorAttach = canAnchor;
             allowRopeAttach = canRope;
+        }
+
+        private string ResolveSurfaceLabel()
+        {
+            if (!string.IsNullOrWhiteSpace(customSurfaceLabel))
+            {
+                return customSurfaceLabel;
+            }
+
+            switch (surfaceLabelPreset)
+            {
+                case ClimbSurfaceLabelPreset.Rock:
+                    return "Rock";
+                case ClimbSurfaceLabelPreset.RoughWall:
+                    return "Rough wall";
+                case ClimbSurfaceLabelPreset.Ledge:
+                    return "Ledge";
+                case ClimbSurfaceLabelPreset.Shelf:
+                    return "Shelf";
+                case ClimbSurfaceLabelPreset.IcyWall:
+                    return "Icy wall";
+                case ClimbSurfaceLabelPreset.WindBurntWall:
+                    return "Wind-burnt wall";
+                case ClimbSurfaceLabelPreset.MossyRock:
+                    return "Mossy rock";
+                case ClimbSurfaceLabelPreset.Custom:
+                    return "Custom surface";
+                default:
+                    return "Rock";
+            }
         }
 
         public bool TryGetGripPoint(Vector3 targetWorld, out Vector3 gripPoint)

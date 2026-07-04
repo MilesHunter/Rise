@@ -68,8 +68,8 @@ namespace Rise
                 chest.localRotation = chestInitialLocalRotation * Quaternion.Euler(tilt * 0.35f, 0f, tilt);
             }
 
-            UpdateArm(leftUpperArm, leftLowerArm, leftUpperArmInitialLocalRotation, leftLowerArmInitialLocalRotation, controller.LeftHand.WorldTarget);
-            UpdateArm(rightUpperArm, rightLowerArm, rightUpperArmInitialLocalRotation, rightLowerArmInitialLocalRotation, controller.RightHand.WorldTarget);
+            SolveArmIk(leftUpperArm, leftLowerArm, leftHandBone, leftUpperArmInitialLocalRotation, leftLowerArmInitialLocalRotation, controller.LeftHand.WorldTarget, true);
+            SolveArmIk(rightUpperArm, rightLowerArm, rightHandBone, rightUpperArmInitialLocalRotation, rightLowerArmInitialLocalRotation, controller.RightHand.WorldTarget, false);
             SnapHandBone(leftHandBone, controller.LeftHand.WorldTarget);
             SnapHandBone(rightHandBone, controller.RightHand.WorldTarget);
 
@@ -211,7 +211,7 @@ namespace Rise
             if (rightUpperLeg != null) rightUpperLegInitialLocalRotation = rightUpperLeg.localRotation;
         }
 
-        private void UpdateArm(Transform upperArm, Transform lowerArm, Quaternion upperInitial, Quaternion lowerInitial, Vector3 target)
+        private void SolveArmIk(Transform upperArm, Transform lowerArm, Transform handBone, Quaternion upperInitial, Quaternion lowerInitial, Vector3 target, bool isLeftArm)
         {
             if (upperArm == null || lowerArm == null)
             {
@@ -221,8 +221,42 @@ namespace Rise
             upperArm.localRotation = upperInitial;
             lowerArm.localRotation = lowerInitial;
 
-            RotateBoneTowards(upperArm, target);
-            RotateBoneTowards(lowerArm, target);
+            Transform handReference = handBone != null ? handBone : FindFirstChildBone(lowerArm);
+            if (handReference == null)
+            {
+                RotateBoneTowards(upperArm, target);
+                RotateBoneTowards(lowerArm, target);
+                return;
+            }
+
+            Vector2 shoulder = ToPlane(upperArm.position);
+            Vector2 elbow = ToPlane(lowerArm.position);
+            Vector2 wrist = ToPlane(handReference.position);
+            Vector2 target2D = ToPlane(target);
+
+            float upperLength = Vector2.Distance(shoulder, elbow);
+            float lowerLength = Vector2.Distance(elbow, wrist);
+            if (upperLength <= 0.0001f || lowerLength <= 0.0001f)
+            {
+                RotateBoneTowards(upperArm, target);
+                RotateBoneTowards(lowerArm, target);
+                return;
+            }
+
+            Vector2 toTarget = target2D - shoulder;
+            float distanceToTarget = Mathf.Max(0.0001f, toTarget.magnitude);
+            float clampedDistance = Mathf.Clamp(distanceToTarget, Mathf.Abs(upperLength - lowerLength) + 0.001f, upperLength + lowerLength - 0.001f);
+            Vector2 targetDirection = toTarget / distanceToTarget;
+            Vector2 bendNormal = isLeftArm ? Vector2.left : Vector2.right;
+
+            float shoulderToElbowAlongTarget = ((upperLength * upperLength) - (lowerLength * lowerLength) + (clampedDistance * clampedDistance)) / (2f * clampedDistance);
+            float elbowHeight = Mathf.Sqrt(Mathf.Max(0f, (upperLength * upperLength) - (shoulderToElbowAlongTarget * shoulderToElbowAlongTarget)));
+
+            Vector2 elbowTarget = shoulder + targetDirection * shoulderToElbowAlongTarget + bendNormal * elbowHeight;
+            Vector2 wristTarget = shoulder + targetDirection * clampedDistance;
+
+            RotateBoneTowards(upperArm, FromPlane(elbowTarget, upperArm.position.z));
+            RotateBoneTowards(lowerArm, FromPlane(wristTarget, lowerArm.position.z));
         }
 
         private static void RotateBoneTowards(Transform bone, Vector3 target)
@@ -236,6 +270,16 @@ namespace Rise
             Vector3 currentAxis = bone.TransformDirection(Vector3.right);
             Quaternion delta = Quaternion.FromToRotation(currentAxis, direction.normalized);
             bone.rotation = delta * bone.rotation;
+        }
+
+        private static Vector2 ToPlane(Vector3 point)
+        {
+            return new Vector2(point.x, point.y);
+        }
+
+        private static Vector3 FromPlane(Vector2 point, float z)
+        {
+            return new Vector3(point.x, point.y, z);
         }
 
         private static void SnapHandBone(Transform handBone, Vector3 target)
