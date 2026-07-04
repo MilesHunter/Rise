@@ -54,8 +54,10 @@ namespace Rise
         public bool IsPressed;
         public Vector3 LocalAnchorOffset;
         public Vector3 WorldTarget;
+        public Vector3 VisibleWorldPoint;
         public float HoldDrainTimer;
         public float SlipCheckTimer;
+        public bool HasVisibleWorldPoint;
 
         public bool HasHold => CurrentHold != null;
         public bool IsAssistedHold => CurrentHold != null && CurrentHold.ZeroStaminaHold;
@@ -66,6 +68,7 @@ namespace Rise
             CurrentHold = null;
             OwnsRuntimeHold = false;
             IsPressed = false;
+            HasVisibleWorldPoint = false;
             HoldDrainTimer = 0f;
             SlipCheckTimer = 0f;
         }

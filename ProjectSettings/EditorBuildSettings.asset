@@ -6,10 +6,7 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 1
-    path: Assets/Scenes/Mountain.unity
-    guid: 99c9720ab356a0642a771bea13969a05
-  - enabled: 1
-    path: Assets/Scenes/InventoryRestDemo.unity
-    guid: 6dbf0a395a0c4aa4e9d31d1c8f1297a2
+    path: Assets/Scenes/FinalPlayable.unity
+    guid: f682e6bc954b898419d9d9192e469e3f
   m_configObjects:
     com.unity.input.settings.actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
