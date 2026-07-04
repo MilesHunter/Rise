@@ -1,0 +1,92 @@
+﻿{
+    "generatedAt":  "2026-07-04T13:45:14",
+    "results":  [
+                    {
+                        "slug":  "light_rope",
+                        "name":  "轻量攀山绳",
+                        "file":  "E:\\数据库\\rise\\rise\\Rise\\Assets\\ArtSource\\Generated\\Props_Raw\\light_rope.png",
+                        "source":  "E:\\数据库\\图片生成\\outputs\\gpt-image-2-2026-07-04T05-40-40-453Z-09a2f6f4.png",
+                        "status":  "generated"
+                    },
+                    {
+                        "slug":  "food_ration",
+                        "name":  "普通食物",
+                        "file":  "E:\\数据库\\rise\\rise\\Rise\\Assets\\ArtSource\\Generated\\Props_Raw\\food_ration.png",
+                        "source":  "E:\\数据库\\图片生成\\outputs\\gpt-image-2-2026-07-04T05-41-06-158Z-7056ea57.png",
+                        "status":  "generated"
+                    },
+                    {
+                        "slug":  "compressed_ration",
+                        "name":  "高能压缩口粮",
+                        "file":  "E:\\数据库\\rise\\rise\\Rise\\Assets\\ArtSource\\Generated\\Props_Raw\\compressed_ration.png",
+                        "source":  "E:\\数据库\\图片生成\\outputs\\gpt-image-2-2026-07-04T05-41-24-105Z-2f2c5936.png",
+                        "status":  "generated"
+                    },
+                    {
+                        "slug":  "fuel_canister",
+                        "name":  "燃料罐",
+                        "file":  "E:\\数据库\\rise\\rise\\Rise\\Assets\\ArtSource\\Generated\\Props_Raw\\fuel_canister.png",
+                        "source":  "E:\\数据库\\图片生成\\outputs\\gpt-image-2-2026-07-04T05-41-43-913Z-08879116.png",
+                        "status":  "generated"
+                    },
+                    {
+                        "slug":  "insulated_fuel",
+                        "name":  "保温燃料罐",
+                        "file":  "E:\\数据库\\rise\\rise\\Rise\\Assets\\ArtSource\\Generated\\Props_Raw\\insulated_fuel.png",
+                        "source":  "E:\\数据库\\图片生成\\outputs\\gpt-image-2-2026-07-04T05-42-11-703Z-74531103.png",
+                        "status":  "generated"
+                    },
+                    {
+                        "slug":  "small_medkit",
+                        "name":  "小医疗包",
+                        "file":  "E:\\数据库\\rise\\rise\\Rise\\Assets\\ArtSource\\Generated\\Props_Raw\\small_medkit.png",
+                        "source":  "E:\\数据库\\图片生成\\outputs\\gpt-image-2-2026-07-04T05-42-36-434Z-38a8244d.png",
+                        "status":  "generated"
+                    },
+                    {
+                        "slug":  "medkit",
+                        "name":  "医疗包",
+                        "file":  "E:\\数据库\\rise\\rise\\Rise\\Assets\\ArtSource\\Generated\\Props_Raw\\medkit.png",
+                        "source":  "E:\\数据库\\图片生成\\outputs\\gpt-image-2-2026-07-04T05-43-07-666Z-b8bf9faf.png",
+                        "status":  "generated"
+                    },
+                    {
+                        "slug":  "sedative",
+                        "name":  "镇定药",
+                        "file":  "E:\\数据库\\rise\\rise\\Rise\\Assets\\ArtSource\\Generated\\Props_Raw\\sedative.png",
+                        "source":  "E:\\数据库\\图片生成\\outputs\\gpt-image-2-2026-07-04T05-43-36-228Z-1ff54a5d.png",
+                        "status":  "generated"
+                    },
+                    {
+                        "slug":  "campfire",
+                        "name":  "篝火",
+                        "file":  "E:\\数据库\\rise\\rise\\Rise\\Assets\\ArtSource\\Generated\\Props_Raw\\campfire.png",
+                        "source":  "E:\\数据库\\图片生成\\outputs\\gpt-image-2-2026-07-04T05-43-58-782Z-a26effaf.png",
+                        "status":  "generated"
+                    },
+                    {
+                        "slug":  "tent",
+                        "name":  "帐篷",
+                        "file":  "E:\\数据库\\rise\\rise\\Rise\\Assets\\ArtSource\\Generated\\Props_Raw\\tent.png",
+                        "source":  "E:\\数据库\\图片生成\\outputs\\gpt-image-2-2026-07-04T05-44-21-094Z-e2109762.png",
+                        "status":  "generated"
+                    },
+                    {
+                        "slug":  "valuable_mineral",
+                        "name":  "高价值矿物",
+                        "file":  "E:\\数据库\\rise\\rise\\Rise\\Assets\\ArtSource\\Generated\\Props_Raw\\valuable_mineral.png",
+                        "source":  "E:\\数据库\\图片生成\\outputs\\gpt-image-2-2026-07-04T05-44-46-857Z-262014e7.png",
+                        "status":  "generated"
+                    },
+                    {
+                        "slug":  "rare_relic",
+                        "name":  "稀有遗物",
+                        "file":  "E:\\数据库\\rise\\rise\\Rise\\Assets\\ArtSource\\Generated\\Props_Raw\\rare_relic.png",
+                        "source":  "E:\\数据库\\图片生成\\outputs\\gpt-image-2-2026-07-04T05-45-14-212Z-ab6caa6b.png",
+                        "status":  "generated"
+                    }
+                ],
+    "failures":  [
+
+                 ]
+}

@@ -1,0 +1,16 @@
+文件名,中文名,类别,用途,规格,状态
+anchor_piton.png,登山锚点/岩钉,工具,锚点放置与背包图标,512x512透明PNG,已生成
+anchor_pack.png,锚点包,工具,背包内锚点堆叠物品,512x512透明PNG,已生成
+climbing_rope.png,攀山绳,工具,背包内标准绳索物品,512x512透明PNG,已生成
+light_rope.png,轻量攀山绳,工具,背包内轻量绳索物品,512x512透明PNG,已生成
+food_ration.png,普通食物,食物,恢复饥饿的基础补给,512x512透明PNG,已生成
+compressed_ration.png,高能压缩口粮,食物,高价值食物补给,512x512透明PNG,已生成
+fuel_canister.png,燃料罐,燃料,长休烹饪和取暖材料,512x512透明PNG,已生成
+insulated_fuel.png,保温燃料罐,燃料,高价值取暖材料,512x512透明PNG,已生成
+small_medkit.png,小医疗包,医疗,基础健康恢复道具,512x512透明PNG,已生成
+medkit.png,医疗包,医疗,高价值健康恢复道具,512x512透明PNG,已生成
+sedative.png,镇定药,医疗,恢复理智的消耗品,512x512透明PNG,已生成
+campfire.png,营地篝火,营地,休息点/长休视觉资产,512x512透明PNG,已生成
+tent.png,登山帐篷,营地,长休息点视觉资产,512x512透明PNG,已生成
+valuable_mineral.png,高价值矿物,资源,可采集高价值资源,512x512透明PNG,已生成
+rare_relic.png,稀有遗物,资源,低概率高价值资源,512x512透明PNG,已生成
