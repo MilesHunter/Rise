@@ -160,14 +160,14 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Rise.CharacterPresentation
   visualRoot: {fileID: 121685267200713797}
   chest: {fileID: 1763002874574636648}
-  leftUpperArm: {fileID: 2824962427574347694}
-  leftLowerArm: {fileID: 1960062610205590426}
-  leftHandBone: {fileID: 8023423491410592904}
-  rightUpperArm: {fileID: 6258189889584961944}
-  rightLowerArm: {fileID: 6177748273629496595}
-  rightHandBone: {fileID: 8053161250995785251}
-  leftUpperLeg: {fileID: 3913553959805106269}
-  rightUpperLeg: {fileID: 3974947651039595403}
+  leftUpperArm: {fileID: 6258189889584961944}
+  leftLowerArm: {fileID: 6177748273629496595}
+  leftHandBone: {fileID: 8053161250995785251}
+  rightUpperArm: {fileID: 2824962427574347694}
+  rightLowerArm: {fileID: 1960062610205590426}
+  rightHandBone: {fileID: 8023423491410592904}
+  leftUpperLeg: {fileID: 3974947651039595403}
+  rightUpperLeg: {fileID: 3913553959805106269}
   rootFollowOffset: {x: 0, y: -0.95, z: 0}
   leftHandTargetOffset: {x: 0, y: 0, z: 0}
   rightHandTargetOffset: {x: 0, y: 0, z: 0}

@@ -22,11 +22,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: de37e1b8b8ccc6a42a7e012b6423d347, type: 3}
       propertyPath: m_LocalRotation.w
-      value: 0.7071067
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: de37e1b8b8ccc6a42a7e012b6423d347, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 0.7071069
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: de37e1b8b8ccc6a42a7e012b6423d347, type: 3}
       propertyPath: m_LocalRotation.y
@@ -34,7 +34,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: de37e1b8b8ccc6a42a7e012b6423d347, type: 3}
       propertyPath: m_LocalRotation.z
-      value: -0
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: de37e1b8b8ccc6a42a7e012b6423d347, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -105,7 +105,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7033bde3a15f9eb4d8064cad56df1bbf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  surfaceLabel: 
+  surfaceLabelPreset: 0
+  customSurfaceLabel: 
   surfaceAudio: {fileID: 0}
   grabCost: 1.8
   holdDrainPerSecond: 1.2
