@@ -1,4 +1,6 @@
+using System;
 using UnityEngine;
+using Object = UnityEngine.Object;
 
 namespace Rise
 {
@@ -7,21 +9,23 @@ namespace Rise
         [SerializeField] private ToolKind selectedTool = ToolKind.Anchor;
         [SerializeField] private bool toolMode;
         [SerializeField] private float ropeRange = 5f;
-        [SerializeField] private int ropeSegments = 4;
+        [SerializeField] private int ropeVisualSegments = 18;
+        [SerializeField] private float ropeSag = 0.45f;
 
         private PlayerClimbController controller;
-        private PlayerInventory inventory;
         private ClimbHold activeAnchor;
-        private GameObject activeRopeRoot;
+        private RopeState activeRope;
         private GameObject generatedRoot;
+
+        public event Action<ToolKind, Vector3> ToolPlaced;
 
         public ToolKind SelectedTool => selectedTool;
         public bool ToolMode => toolMode;
+        public bool IsPointerToolMode => toolMode && selectedTool == ToolKind.Rope;
 
         public void Initialize(PlayerClimbController owner, Transform root)
         {
             controller = owner;
-            inventory = owner != null ? owner.Inventory : GetComponent<PlayerInventory>();
             if (generatedRoot == null)
             {
                 generatedRoot = new GameObject("GeneratedTools");
@@ -33,6 +37,10 @@ namespace Rise
         public void ToggleToolMode()
         {
             toolMode = !toolMode;
+            if (!toolMode)
+            {
+                ClearActiveRope();
+            }
         }
 
         public void CycleTool(float scrollValue)
@@ -43,6 +51,10 @@ namespace Rise
             }
 
             selectedTool = scrollValue > 0f ? ToolKind.Rope : ToolKind.Anchor;
+            if (selectedTool != ToolKind.Rope)
+            {
+                ClearActiveRope();
+            }
         }
 
         public bool TryUseTool(Vector3 targetWorld, ClimbHold hoveredHold, ClimbSurface hoveredSurface)
@@ -52,26 +64,132 @@ namespace Rise
                 return false;
             }
 
-            bool used;
-            switch (selectedTool)
+            bool used = selectedTool switch
             {
-                case ToolKind.Anchor:
-                    used = TryPlaceAnchor(targetWorld, hoveredHold, hoveredSurface);
-                    break;
-                case ToolKind.Rope:
-                    used = TryPlaceRope(targetWorld, hoveredHold, hoveredSurface);
-                    break;
-                default:
-                    used = false;
-                    break;
-            }
+                ToolKind.Anchor => TryPlaceAnchor(targetWorld, hoveredHold, hoveredSurface),
+                ToolKind.Rope => BeginRopePlacement(targetWorld, hoveredHold, hoveredSurface),
+                _ => false
+            };
 
-            if (used)
+            if (used && selectedTool == ToolKind.Anchor)
             {
                 toolMode = false;
             }
 
             return used;
+        }
+
+        public bool HasActiveRope(HandState hand)
+        {
+            return activeRope != null && activeRope.Hand == hand && activeRope.AnchorHold != null;
+        }
+
+        public HandState ActiveRopeHand => activeRope?.Hand;
+
+        public bool IsHandReservedForRope(HandState hand)
+        {
+            return activeRope != null && activeRope.Hand == hand;
+        }
+
+        public bool TryFireRope(HandState preferredHand, Vector3 targetWorld, ClimbHold hoveredHold, ClimbSurface hoveredSurface)
+        {
+            if (!toolMode || selectedTool != ToolKind.Rope || preferredHand == null)
+            {
+                return false;
+            }
+
+            HandState ropeHand = ResolveRopeHand(preferredHand);
+            if (ropeHand == null)
+            {
+                return false;
+            }
+
+            Vector3 anchorPoint;
+            if (hoveredHold != null && hoveredHold.AllowRopeAttach)
+            {
+                anchorPoint = hoveredHold.Position;
+            }
+            else if (hoveredSurface != null && hoveredSurface.AllowRopeAttach && hoveredSurface.TryGetGripPoint(targetWorld, out Vector3 surfacePoint))
+            {
+                anchorPoint = surfacePoint;
+            }
+            else
+            {
+                return false;
+            }
+
+            Vector3 source = controller.GetHandAnchorWorld(ropeHand);
+            anchorPoint.z = 0f;
+            if (Vector3.Distance(source, anchorPoint) > ropeRange || !controller.Vitals.TrySpendStamina(4f))
+            {
+                return false;
+            }
+
+            ClearActiveRope();
+
+            GameObject ropeRoot = new GameObject("RopeTether");
+            ropeRoot.transform.SetParent(generatedRoot.transform, false);
+
+            GameObject anchorObject = new GameObject("RopeAnchor");
+            anchorObject.transform.SetParent(ropeRoot.transform, false);
+            anchorObject.transform.position = anchorPoint;
+
+            ClimbHold anchorHold = anchorObject.AddComponent<ClimbHold>();
+            anchorHold.Configure(ClimbHoldType.Rope, true, true, 0f, 0f, 0f, 0f, "Rope");
+
+            LineRenderer line = ropeRoot.AddComponent<LineRenderer>();
+            line.positionCount = Mathf.Max(ropeVisualSegments, 2);
+            line.startWidth = 0.045f;
+            line.endWidth = 0.035f;
+            line.material = new Material(Shader.Find("Sprites/Default"));
+            line.startColor = new Color(0.85f, 0.78f, 0.62f);
+            line.endColor = new Color(0.7f, 0.63f, 0.48f);
+            line.sortingOrder = 4;
+            line.useWorldSpace = true;
+
+            activeRope = new RopeState
+            {
+                Hand = ropeHand,
+                Root = ropeRoot,
+                AnchorHold = anchorHold,
+                Line = line
+            };
+
+            UpdateRopeVisual();
+            ToolPlaced?.Invoke(ToolKind.Rope, anchorPoint);
+            return true;
+        }
+
+        public void UpdateRuntime()
+        {
+            UpdateRopeVisual();
+        }
+
+        public void ReleaseRope(HandState hand)
+        {
+            if (activeRope == null || activeRope.Hand != hand)
+            {
+                return;
+            }
+
+            ClearActiveRope();
+        }
+
+        public ClimbHold GetRopeHold(HandState hand)
+        {
+            return activeRope != null && activeRope.Hand == hand ? activeRope.AnchorHold : null;
+        }
+
+        public string GetToolPromptSuffix()
+        {
+            if (!toolMode)
+            {
+                return string.Empty;
+            }
+
+            return selectedTool == ToolKind.Rope
+                ? "Hold RMB fire rope  release RMB retract"
+                : "Click a hold or wall point";
         }
 
         private bool TryPlaceAnchor(Vector3 targetWorld, ClimbHold hoveredHold, ClimbSurface hoveredSurface)
@@ -90,14 +208,14 @@ namespace Rise
                 return false;
             }
 
-            if (inventory == null || inventory.CountSmall(PlayerInventory.AnchorItemId) <= 0)
+            if (!controller.Vitals.TrySpendStamina(2f))
             {
                 return false;
             }
 
             if (activeAnchor != null)
             {
-                Destroy(activeAnchor.gameObject);
+                Object.Destroy(activeAnchor.gameObject);
             }
 
             GameObject anchorObject = GameObject.CreatePrimitive(PrimitiveType.Sphere);
@@ -112,58 +230,63 @@ namespace Rise
 
             activeAnchor = anchorObject.AddComponent<ClimbHold>();
             activeAnchor.Configure(ClimbHoldType.Anchor, true, true, 0f, 0f, 0f, 0f, "Anchor");
-            inventory.TryConsumeSmall(PlayerInventory.AnchorItemId, 1);
+            ToolPlaced?.Invoke(ToolKind.Anchor, anchorObject.transform.position);
             return true;
         }
 
-        private bool TryPlaceRope(Vector3 targetWorld, ClimbHold hoveredHold, ClimbSurface hoveredSurface)
+        private bool BeginRopePlacement(Vector3 targetWorld, ClimbHold hoveredHold, ClimbSurface hoveredSurface)
         {
-            Vector3 source = controller.transform.position + new Vector3(0f, 1.25f, 0f);
-            Vector3 target = targetWorld;
-            if (hoveredHold != null && hoveredHold.AllowRopeAttach)
-            {
-                target = hoveredHold.Position;
-            }
-            else if (hoveredSurface != null && hoveredSurface.AllowRopeAttach && hoveredSurface.TryGetGripPoint(targetWorld, out Vector3 surfacePoint))
-            {
-                target = surfacePoint;
-            }
-            target.z = 0f;
+            return TryFireRope(controller.RightHand, targetWorld, hoveredHold, hoveredSurface);
+        }
 
-            if (Vector3.Distance(source, target) > ropeRange || inventory == null || inventory.CountSmall(PlayerInventory.RopeItemId) <= 0)
+        private HandState ResolveRopeHand(HandState preferredHand)
+        {
+            if (!preferredHand.HasHold)
             {
-                return false;
+                return preferredHand;
             }
 
-            if (activeRopeRoot != null)
+            HandState fallback = preferredHand == controller.RightHand ? controller.LeftHand : controller.RightHand;
+            return fallback.HasHold ? null : fallback;
+        }
+
+        private void UpdateRopeVisual()
+        {
+            if (activeRope == null || activeRope.Line == null || activeRope.AnchorHold == null)
             {
-                Destroy(activeRopeRoot);
+                return;
             }
 
-            activeRopeRoot = new GameObject("RopePath");
-            activeRopeRoot.transform.SetParent(generatedRoot.transform, false);
+            Vector3 start = controller.GetHandAnchorWorld(activeRope.Hand);
+            Vector3 end = activeRope.AnchorHold.Position;
+            int segments = activeRope.Line.positionCount;
+            float span = Vector3.Distance(start, end);
 
-            for (int i = 1; i <= ropeSegments; i++)
+            for (int i = 0; i < segments; i++)
             {
-                float t = i / (float)ropeSegments;
-                Vector3 position = Vector3.Lerp(source, target, t) + Vector3.right * Mathf.Sin(t * Mathf.PI) * 0.25f;
+                float t = segments == 1 ? 0f : i / (float)(segments - 1);
+                Vector3 point = Vector3.Lerp(start, end, t);
+                point.y -= Mathf.Sin(t * Mathf.PI) * ropeSag * Mathf.Max(1f, span * 0.35f);
+                activeRope.Line.SetPosition(i, point);
+            }
+        }
 
-                GameObject segment = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                segment.name = $"RopeHold_{i}";
-                segment.transform.SetParent(activeRopeRoot.transform, false);
-                segment.transform.position = position;
-                segment.transform.localScale = Vector3.one * 0.2f;
-                Object.Destroy(segment.GetComponent<SphereCollider>());
-
-                Renderer renderer = segment.GetComponent<Renderer>();
-                renderer.material.color = new Color(0.25f, 0.85f, 0.95f);
-
-                ClimbHold hold = segment.AddComponent<ClimbHold>();
-                hold.Configure(ClimbHoldType.Rope, true, true, 0f, 0f, 0f, 0f, "Rope");
+        private void ClearActiveRope()
+        {
+            if (activeRope?.Root != null)
+            {
+                Object.Destroy(activeRope.Root);
             }
 
-            inventory.TryConsumeSmall(PlayerInventory.RopeItemId, 1);
-            return true;
+            activeRope = null;
+        }
+
+        private sealed class RopeState
+        {
+            public HandState Hand;
+            public GameObject Root;
+            public ClimbHold AnchorHold;
+            public LineRenderer Line;
         }
     }
 }

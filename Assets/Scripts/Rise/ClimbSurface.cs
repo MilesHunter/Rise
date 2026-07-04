@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace Rise
 {
@@ -7,20 +8,26 @@ namespace Rise
     public sealed class ClimbSurface : MonoBehaviour
     {
         private static readonly List<ClimbSurface> ActiveSurfacesInternal = new List<ClimbSurface>();
+        private const float DefaultGripProbeDepth = 4f;
 
-        [SerializeField] private string surfaceLabel = "Rock";
+        [SerializeField] private ClimbSurfaceLabelPreset surfaceLabelPreset = ClimbSurfaceLabelPreset.Rock;
+        [FormerlySerializedAs("surfaceLabel")]
+        [SerializeField] private string customSurfaceLabel = string.Empty;
+        [SerializeField] private SurfaceAudioProfile surfaceAudio;
         [SerializeField] private float grabCost = 2f;
         [SerializeField] private float holdDrainPerSecond = 1f;
         [SerializeField] private float slipCheckInterval;
         [SerializeField] private float slipChance;
         [SerializeField] private bool allowAnchorAttach = true;
         [SerializeField] private bool allowRopeAttach = true;
+        [SerializeField] private float gripProbeDepth = DefaultGripProbeDepth;
 
         private Collider cachedCollider;
 
         public static IReadOnlyList<ClimbSurface> ActiveSurfaces => ActiveSurfacesInternal;
 
-        public string SurfaceLabel => surfaceLabel;
+        public string SurfaceLabel => ResolveSurfaceLabel();
+        public SurfaceAudioProfile SurfaceAudio => surfaceAudio;
         public float GrabCost => grabCost;
         public float HoldDrainPerSecond => holdDrainPerSecond;
         public float SlipCheckInterval => slipCheckInterval;
@@ -30,7 +37,8 @@ namespace Rise
 
         public void Configure(string label, float initialGrabCost, float drainPerSecond, float interval, float chanceToSlip, bool canAnchor, bool canRope)
         {
-            surfaceLabel = label;
+            customSurfaceLabel = label;
+            surfaceLabelPreset = ClimbSurfaceLabelPreset.Custom;
             grabCost = initialGrabCost;
             holdDrainPerSecond = drainPerSecond;
             slipCheckInterval = interval;
@@ -39,7 +47,37 @@ namespace Rise
             allowRopeAttach = canRope;
         }
 
-        public bool TryGetGripPoint(Vector3 cursorWorld, out Vector3 gripPoint)
+        private string ResolveSurfaceLabel()
+        {
+            if (!string.IsNullOrWhiteSpace(customSurfaceLabel))
+            {
+                return customSurfaceLabel;
+            }
+
+            switch (surfaceLabelPreset)
+            {
+                case ClimbSurfaceLabelPreset.Rock:
+                    return "Rock";
+                case ClimbSurfaceLabelPreset.RoughWall:
+                    return "Rough wall";
+                case ClimbSurfaceLabelPreset.Ledge:
+                    return "Ledge";
+                case ClimbSurfaceLabelPreset.Shelf:
+                    return "Shelf";
+                case ClimbSurfaceLabelPreset.IcyWall:
+                    return "Icy wall";
+                case ClimbSurfaceLabelPreset.WindBurntWall:
+                    return "Wind-burnt wall";
+                case ClimbSurfaceLabelPreset.MossyRock:
+                    return "Mossy rock";
+                case ClimbSurfaceLabelPreset.Custom:
+                    return "Custom surface";
+                default:
+                    return "Rock";
+            }
+        }
+
+        public bool TryGetGripPoint(Vector3 targetWorld, out Vector3 gripPoint)
         {
             Collider targetCollider = GetCollider();
             if (targetCollider == null)
@@ -48,7 +86,34 @@ namespace Rise
                 return false;
             }
 
-            gripPoint = targetCollider.ClosestPoint(new Vector3(cursorWorld.x, cursorWorld.y, targetCollider.bounds.center.z));
+            if (TryGetRaycastGripPoint(targetCollider, targetWorld, out gripPoint))
+            {
+                return true;
+            }
+
+            gripPoint = targetCollider.ClosestPoint(new Vector3(targetWorld.x, targetWorld.y, targetCollider.bounds.center.z));
+            gripPoint.z = 0f;
+            return true;
+        }
+
+        private bool TryGetRaycastGripPoint(Collider targetCollider, Vector3 targetWorld, out Vector3 gripPoint)
+        {
+            float probeDepth = Mathf.Max(gripProbeDepth, 0.1f);
+            Vector3 rayOriginFront = new Vector3(targetWorld.x, targetWorld.y, targetWorld.z - probeDepth);
+            Vector3 rayOriginBack = new Vector3(targetWorld.x, targetWorld.y, targetWorld.z + probeDepth);
+            float rayDistance = probeDepth * 2f;
+
+            bool hitFront = targetCollider.Raycast(new Ray(rayOriginFront, Vector3.forward), out RaycastHit frontHit, rayDistance);
+            bool hitBack = targetCollider.Raycast(new Ray(rayOriginBack, Vector3.back), out RaycastHit backHit, rayDistance);
+
+            if (!hitFront && !hitBack)
+            {
+                gripPoint = default;
+                return false;
+            }
+
+            RaycastHit chosenHit = !hitBack || (hitFront && frontHit.distance <= backHit.distance) ? frontHit : backHit;
+            gripPoint = chosenHit.point;
             gripPoint.z = 0f;
             return true;
         }

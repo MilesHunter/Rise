@@ -1,4 +1,5 @@
 using System.Collections;
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Random = UnityEngine.Random;
@@ -9,9 +10,6 @@ namespace Rise
     [RequireComponent(typeof(CapsuleCollider))]
     [RequireComponent(typeof(PlayerVitals))]
     [RequireComponent(typeof(ToolController))]
-    [RequireComponent(typeof(PlayerInventory))]
-    [RequireComponent(typeof(RestSessionController))]
-    [RequireComponent(typeof(CookingSystem))]
     public sealed class PlayerClimbController : MonoBehaviour
     {
         [SerializeField] private float holdReach = 2.75f;
@@ -30,30 +28,36 @@ namespace Rise
         private Rigidbody body;
         private Camera mainCamera;
         private RestPoint currentRestPoint;
-        private ResourceNode currentResourceNode;
         private GoalPoint currentGoalPoint;
         private Vector3 checkpoint;
         private Vector3 bodyDriveOffset;
         private Coroutine restRoutine;
         private bool hasWon;
         private bool initialized;
-        private bool inputFrozen;
+        private AudioCueId activeBreathingCue;
+        private bool cursorLocked;
 
         public HandState LeftHand { get; } = new HandState { DisplayName = "Left", IsLeft = true, LocalAnchorOffset = new Vector3(-0.45f, 0.55f, 0f) };
         public HandState RightHand { get; } = new HandState { DisplayName = "Right", IsLeft = false, LocalAnchorOffset = new Vector3(0.45f, 0.55f, 0f) };
         public PlayerVitals Vitals { get; private set; }
         public ToolController Tools { get; private set; }
-        public PlayerInventory Inventory { get; private set; }
-        public RestSessionController RestSession { get; private set; }
-        public ResourceNode CurrentResourceNode => currentResourceNode;
         public string CurrentPrompt { get; private set; }
         public Vector3 CursorWorld { get; private set; }
         public Vector3 BodyVelocity => body != null ? body.linearVelocity : Vector3.zero;
         public bool HasWon => hasWon;
-        public bool InputFrozen => inputFrozen;
         public float LeftKickVisual { get; private set; }
         public float RightKickVisual { get; private set; }
         public float HandReachLimit => handReachLimit;
+        public event Action<HandState, ClimbHold, ClimbSurface, Vector3> GrabSuccess;
+        public event Action<HandState, Vector3> GrabFailed;
+        public event Action<HandState, ClimbHold, ClimbSurface, Vector3> HoldReleased;
+        public event Action<HandState, ClimbHold, ClimbSurface, Vector3> SlipOccurred;
+        public event Action<bool, Vector3> KickPerformed;
+        public event Action<RestPointType, Vector3> RestStarted;
+        public event Action<RestPointType, Vector3> RestCompleted;
+        public event Action<Vector3> Respawned;
+        public event Action<Vector3> GoalReached;
+        public event Action<AudioCueId> BreathingStateChanged;
 
         public void Initialize(Camera sceneCamera, Vector3 spawnPoint, Transform generatedRoot)
         {
@@ -70,24 +74,33 @@ namespace Rise
             body.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
         }
 
+        private void OnEnable()
+        {
+            SetCursorLock(true);
+        }
+
+        private void OnDisable()
+        {
+            SetCursorLock(false);
+        }
+
+        private void OnApplicationFocus(bool hasFocus)
+        {
+            SetCursorLock(hasFocus);
+        }
+
         private void Update()
         {
             UpdateCursorWorld();
-            if (inputFrozen || IsInventoryBlockingInput())
-            {
-                UpdatePrompt();
-                DecayKickVisuals();
-                return;
-            }
-
             UpdateMouseDrivenTargets();
             UpdateToolInput();
             UpdateHandInput();
             UpdateKickInput();
-            UpdateResourceInput();
             UpdateRestInput();
             UpdatePrompt();
             DecayKickVisuals();
+            UpdateBreathingState();
+            Tools.UpdateRuntime();
         }
 
         private void FixedUpdate()
@@ -111,16 +124,12 @@ namespace Rise
                 currentRestPoint = restPoint;
             }
 
-            if (other.TryGetComponent(out ResourceNode resourceNode))
-            {
-                currentResourceNode = resourceNode;
-            }
-
             if (other.TryGetComponent(out GoalPoint goalPoint))
             {
                 currentGoalPoint = goalPoint;
                 hasWon = true;
                 CurrentPrompt = goalPoint.PromptText;
+                GoalReached?.Invoke(goalPoint.transform.position);
             }
         }
 
@@ -129,11 +138,6 @@ namespace Rise
             if (other.TryGetComponent(out RestPoint restPoint) && currentRestPoint == restPoint)
             {
                 currentRestPoint = null;
-            }
-
-            if (other.TryGetComponent(out ResourceNode resourceNode) && currentResourceNode == resourceNode)
-            {
-                currentResourceNode = null;
             }
 
             if (other.TryGetComponent(out GoalPoint goalPoint) && currentGoalPoint == goalPoint)
@@ -147,6 +151,12 @@ namespace Rise
             if (mainCamera == null)
             {
                 mainCamera = Camera.main;
+            }
+
+            bool shouldLockCursor = Tools == null || !Tools.IsPointerToolMode;
+            if (cursorLocked != shouldLockCursor)
+            {
+                SetCursorLock(shouldLockCursor);
             }
 
             Vector2 mousePosition = Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
@@ -182,12 +192,26 @@ namespace Rise
                 return;
             }
 
-            HandleHand(LeftHand, Mouse.current.leftButton.wasPressedThisFrame, Mouse.current.leftButton.wasReleasedThisFrame);
+            if (Tools == null || Tools.ActiveRopeHand != LeftHand)
+            {
+                HandleHand(LeftHand, Mouse.current.leftButton.wasPressedThisFrame, Mouse.current.leftButton.wasReleasedThisFrame);
+            }
             HandleHand(RightHand, Mouse.current.rightButton.wasPressedThisFrame, Mouse.current.rightButton.wasReleasedThisFrame);
         }
 
         private void HandleHand(HandState hand, bool pressed, bool released)
         {
+            if (Tools != null && Tools.IsHandReservedForRope(hand) && !(Tools.IsPointerToolMode && hand == RightHand))
+            {
+                return;
+            }
+
+            if (Tools != null && Tools.IsPointerToolMode && hand == RightHand)
+            {
+                HandleRopeHand(hand, pressed, released);
+                return;
+            }
+
             hand.WorldTarget = hand.HasHold ? hand.CurrentHold.Position : GetReachLimitedTarget(hand, hand.WorldTarget);
 
             if (pressed)
@@ -214,12 +238,58 @@ namespace Rise
             }
         }
 
+        private void HandleRopeHand(HandState hand, bool pressed, bool released)
+        {
+            hand.WorldTarget = GetReachLimitedTarget(hand, CursorWorld);
+
+            if (pressed)
+            {
+                hand.IsPressed = true;
+                ClimbHold hoveredHold = FindHoveredHold(CursorWorld);
+                ClimbSurface hoveredSurface = hoveredHold == null ? FindHoveredSurface(CursorWorld) : null;
+
+                if (Tools.TryFireRope(hand, CursorWorld, hoveredHold, hoveredSurface))
+                {
+                    HandState ropeHand = Tools.ActiveRopeHand;
+                    ClimbHold ropeHold = ropeHand != null ? Tools.GetRopeHold(ropeHand) : null;
+                    if (ropeHold != null)
+                    {
+                        ReleaseHand(ropeHand);
+                        ropeHand.CurrentHold = ropeHold;
+                        ropeHand.OwnsRuntimeHold = false;
+                        ropeHand.State = HandGrabState.AssistedHold;
+                        ropeHand.WorldTarget = ropeHold.Position;
+                        ropeHand.HoldDrainTimer = 0f;
+                        ropeHand.SlipCheckTimer = 0f;
+                        GrabSuccess?.Invoke(ropeHand, ropeHold, FindSurfaceForPoint(ropeHold.Position), ropeHold.Position);
+                    }
+                }
+                else
+                {
+                    GrabFailed?.Invoke(hand, hand.WorldTarget);
+                }
+            }
+
+            if (released)
+            {
+                hand.IsPressed = false;
+                HandState ropeHand = Tools.ActiveRopeHand;
+                if (ropeHand != null && Tools.HasActiveRope(ropeHand))
+                {
+                    Tools.ReleaseRope(ropeHand);
+                    ReleaseHand(ropeHand);
+                }
+            }
+        }
+
         private void TryGrabHand(HandState hand, ClimbHold hoveredHold, ClimbHold surfaceGrip)
         {
             ClimbHold targetHold = hoveredHold != null ? hoveredHold : surfaceGrip;
+            ClimbSurface targetSurface = hoveredHold == null ? FindSurfaceForPoint(targetHold != null ? targetHold.Position : hand.WorldTarget) : null;
             if (targetHold == null)
             {
                 hand.State = HandGrabState.Reach;
+                GrabFailed?.Invoke(hand, hand.WorldTarget);
                 return;
             }
 
@@ -228,6 +298,7 @@ namespace Rise
             {
                 hand.State = HandGrabState.Reach;
                 ReleaseRuntimeHoldIfNeeded(surfaceGrip);
+                GrabFailed?.Invoke(hand, targetHold.Position);
                 return;
             }
 
@@ -235,6 +306,7 @@ namespace Rise
             if (!Vitals.TrySpendStamina(grabCost))
             {
                 ReleaseRuntimeHoldIfNeeded(surfaceGrip);
+                GrabFailed?.Invoke(hand, targetHold.Position);
                 return;
             }
 
@@ -254,12 +326,15 @@ namespace Rise
             hand.WorldTarget = targetHold.Position;
             hand.HoldDrainTimer = 0f;
             hand.SlipCheckTimer = 0f;
+            GrabSuccess?.Invoke(hand, targetHold, targetSurface, targetHold.Position);
         }
 
         private void ReleaseHand(HandState hand)
         {
             hand.State = HandGrabState.Releasing;
             Vector3 releasedTarget = hand.CurrentHold != null ? hand.CurrentHold.Position : hand.WorldTarget;
+            ClimbHold releasedHold = hand.CurrentHold;
+            ClimbSurface releasedSurface = FindSurfaceForPoint(releasedTarget);
             if (hand.OwnsRuntimeHold && hand.CurrentHold != null)
             {
                 Destroy(hand.CurrentHold.gameObject);
@@ -270,6 +345,7 @@ namespace Rise
             hand.SlipCheckTimer = 0f;
             hand.WorldTarget = GetReachLimitedTarget(hand, releasedTarget);
             hand.State = HandGrabState.Idle;
+            HoldReleased?.Invoke(hand, releasedHold, releasedSurface, releasedTarget);
         }
 
         private void UpdateKickInput()
@@ -287,14 +363,16 @@ namespace Rise
 
             if (Keyboard.current.qKey.wasPressedThisFrame && Vitals.TrySpendStamina(4f))
             {
-                body.AddForce(new Vector3(-1.2f, 2.5f, 0f).normalized * kickForce * Inventory.KickForceMultiplier, ForceMode.Impulse);
+                body.AddForce(new Vector3(-1.2f, 2.5f, 0f).normalized * kickForce, ForceMode.Impulse);
                 LeftKickVisual = 1f;
+                KickPerformed?.Invoke(true, transform.position + new Vector3(-0.35f, 0.25f, 0f));
             }
 
             if (Keyboard.current.eKey.wasPressedThisFrame && Vitals.TrySpendStamina(4f))
             {
-                body.AddForce(new Vector3(1.2f, 2.5f, 0f).normalized * kickForce * Inventory.KickForceMultiplier, ForceMode.Impulse);
+                body.AddForce(new Vector3(1.2f, 2.5f, 0f).normalized * kickForce, ForceMode.Impulse);
                 RightKickVisual = 1f;
+                KickPerformed?.Invoke(false, transform.position + new Vector3(0.35f, 0.25f, 0f));
             }
         }
 
@@ -307,29 +385,8 @@ namespace Rise
 
             if (Keyboard.current.fKey.wasPressedThisFrame)
             {
-                RestSession.BeginRest(currentRestPoint);
+                restRoutine = StartCoroutine(PerformRest(currentRestPoint));
             }
-        }
-
-        private void UpdateResourceInput()
-        {
-            if (Keyboard.current == null || currentResourceNode == null || restRoutine != null || hasWon)
-            {
-                return;
-            }
-
-            if (!Keyboard.current.fKey.wasPressedThisFrame)
-            {
-                return;
-            }
-
-            if (currentResourceNode.RevealedCount > 0)
-            {
-                currentResourceNode.TryTakeRevealed(Inventory, 0);
-                return;
-            }
-
-            currentResourceNode.StartSearch(this);
         }
 
         private IEnumerator PerformRest(RestPoint restPoint)
@@ -338,6 +395,7 @@ namespace Rise
             ReleaseHand(RightHand);
             body.isKinematic = true;
             CurrentPrompt = restPoint.PromptText;
+            RestStarted?.Invoke(restPoint.RestType, restPoint.transform.position);
             yield return new WaitForSeconds(restDuration);
 
             if (restPoint.RestType == RestPointType.ShortRest)
@@ -352,6 +410,7 @@ namespace Rise
 
             body.isKinematic = false;
             restRoutine = null;
+            RestCompleted?.Invoke(restPoint.RestType, restPoint.transform.position);
         }
 
         private void UpdatePrompt()
@@ -373,14 +432,8 @@ namespace Rise
                 return;
             }
 
-            if (currentResourceNode != null)
-            {
-                CurrentPrompt = currentResourceNode.BuildStatusText();
-                return;
-            }
-
             CurrentPrompt = Tools.ToolMode
-                ? $"Tool mode: {Tools.SelectedTool}. Click a hold or wall point."
+                ? $"Tool mode: {Tools.SelectedTool}. {Tools.GetToolPromptSuffix()}"
                 : BuildGripPrompt();
         }
 
@@ -420,7 +473,7 @@ namespace Rise
             }
 
             hand.HoldDrainTimer -= 1f;
-            if (!Vitals.TrySpendStamina(hand.CurrentHold.HoldDrainPerSecond * Inventory.HoldDrainMultiplier))
+            if (!Vitals.TrySpendStamina(hand.CurrentHold.HoldDrainPerSecond))
             {
                 ReleaseHand(hand);
                 if (!LeftHand.HasHold && !RightHand.HasHold)
@@ -451,7 +504,8 @@ namespace Rise
         private void UpdateMouseDrivenTargets()
         {
             Vector3 worldDelta = Vector3.zero;
-            if (Mouse.current != null)
+            bool pointerMode = Tools != null && Tools.IsPointerToolMode;
+            if (Mouse.current != null && !pointerMode)
             {
                 Vector2 mouseDelta = Mouse.current.delta.ReadValue();
                 worldDelta = new Vector3(mouseDelta.x, mouseDelta.y, 0f) * mouseDeltaWorldScale;
@@ -492,7 +546,7 @@ namespace Rise
             }
             else
             {
-                LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, LeftHand.WorldTarget);
+                LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, pointerMode ? CursorWorld : LeftHand.WorldTarget);
             }
 
             if (RightHand.HasHold)
@@ -501,7 +555,7 @@ namespace Rise
             }
             else
             {
-                RightHand.WorldTarget = GetReachLimitedTarget(RightHand, RightHand.WorldTarget);
+                RightHand.WorldTarget = GetReachLimitedTarget(RightHand, pointerMode ? CursorWorld : RightHand.WorldTarget);
             }
         }
 
@@ -604,7 +658,11 @@ namespace Rise
             hand.SlipCheckTimer -= hand.CurrentHold.SlipCheckInterval;
             if (Random.value <= hand.CurrentHold.SlipChance)
             {
+                ClimbHold slippingHold = hand.CurrentHold;
+                Vector3 slipPoint = slippingHold.Position;
+                ClimbSurface slipSurface = FindSurfaceForPoint(slipPoint);
                 ReleaseHand(hand);
+                SlipOccurred?.Invoke(hand, slippingHold, slipSurface, slipPoint);
             }
         }
 
@@ -631,27 +689,7 @@ namespace Rise
                 body.linearVelocity = Vector3.zero;
             }
             Vitals.ResetToCheckpoint();
-        }
-
-        public void BeginRestFreeze(RestPoint restPoint)
-        {
-            ReleaseHand(LeftHand);
-            ReleaseHand(RightHand);
-            inputFrozen = true;
-            body.isKinematic = true;
-            CurrentPrompt = restPoint != null ? restPoint.PromptText : "Resting";
-        }
-
-        public void EndRestFreeze()
-        {
-            inputFrozen = false;
-            body.isKinematic = false;
-            ResetFreeHandTargets();
-        }
-
-        public void SetCheckpoint(Vector3 position)
-        {
-            checkpoint = position;
+            Respawned?.Invoke(checkpoint);
         }
 
         private void DecayKickVisuals()
@@ -720,9 +758,6 @@ namespace Rise
             body = GetComponent<Rigidbody>();
             Vitals = GetComponent<PlayerVitals>();
             Tools = GetComponent<ToolController>();
-            Inventory = GetComponent<PlayerInventory>();
-            Inventory.EnsureInitialized();
-            RestSession = GetComponent<RestSessionController>();
 
             Transform toolRoot = generatedRoot != null ? generatedRoot : (transform.parent != null ? transform.parent : transform);
             Tools.Initialize(this, toolRoot);
@@ -736,10 +771,68 @@ namespace Rise
             }
         }
 
-        private bool IsInventoryBlockingInput()
+        private void UpdateBreathingState()
         {
-            InventoryUI ui = Object.FindAnyObjectByType<InventoryUI>();
-            return ui != null && ui.BlocksClimbInput && (RestSession == null || !RestSession.IsResting);
+            AudioCueId nextCue = AudioCueId.None;
+            if (restRoutine == null && !hasWon)
+            {
+                bool isHoldingOrMovingHard = LeftHand.HasHold || RightHand.HasHold || body.linearVelocity.sqrMagnitude > 4f;
+                if (Vitals.LowStamina && isHoldingOrMovingHard)
+                {
+                    nextCue = AudioCueId.BreathingHeavyLoop;
+                }
+                else if (isHoldingOrMovingHard)
+                {
+                    nextCue = AudioCueId.BreathingLightLoop;
+                }
+            }
+
+            if (activeBreathingCue == nextCue)
+            {
+                return;
+            }
+
+            activeBreathingCue = nextCue;
+            BreathingStateChanged?.Invoke(nextCue);
+        }
+
+        public Vector3 GetHandAnchorWorld(HandState hand)
+        {
+            return transform.position + hand.LocalAnchorOffset;
+        }
+
+        private ClimbSurface FindSurfaceForPoint(Vector3 point)
+        {
+            for (int i = 0; i < ClimbSurface.ActiveSurfaces.Count; i++)
+            {
+                ClimbSurface surface = ClimbSurface.ActiveSurfaces[i];
+                if (surface == null || !surface.TryGetGripPoint(point, out Vector3 gripPoint))
+                {
+                    continue;
+                }
+
+                if (Vector2.Distance(new Vector2(point.x, point.y), new Vector2(gripPoint.x, gripPoint.y)) <= surfaceGrabTolerance + 0.05f)
+                {
+                    return surface;
+                }
+            }
+
+            return null;
+        }
+
+        private void SetCursorLock(bool shouldLock)
+        {
+            cursorLocked = shouldLock;
+
+            if (shouldLock)
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+                return;
+            }
+
+            Cursor.lockState = CursorLockMode.None;
+            Cursor.visible = true;
         }
     }
 }

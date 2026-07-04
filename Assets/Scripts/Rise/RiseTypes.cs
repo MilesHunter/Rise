@@ -19,6 +19,18 @@ namespace Rise
         Rope
     }
 
+    public enum ClimbSurfaceLabelPreset
+    {
+        Rock,
+        RoughWall,
+        Ledge,
+        Shelf,
+        IcyWall,
+        WindBurntWall,
+        MossyRock,
+        Custom
+    }
+
     public enum ToolKind
     {
         Anchor,
