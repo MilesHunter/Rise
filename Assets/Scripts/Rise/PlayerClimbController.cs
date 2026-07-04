@@ -74,7 +74,10 @@ namespace Rise
         private void Awake()
         {
             EnsureInitialized(transform.parent != null ? transform.parent : transform);
-            body.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+            body.constraints = RigidbodyConstraints.FreezePositionZ |
+                               RigidbodyConstraints.FreezeRotationX |
+                               RigidbodyConstraints.FreezeRotationY |
+                               RigidbodyConstraints.FreezeRotationZ;
         }
 
         private void OnEnable()
@@ -222,7 +225,14 @@ namespace Rise
                 return;
             }
 
-            hand.WorldTarget = hand.HasHold ? hand.CurrentHold.Position : GetReachLimitedTarget(hand, hand.WorldTarget);
+            if (hand.HasHold)
+            {
+                hand.WorldTarget = GetHoldTarget(hand);
+            }
+            else
+            {
+                hand.WorldTarget = GetReachLimitedTarget(hand, hand.WorldTarget);
+            }
 
             if (pressed)
             {
@@ -268,7 +278,7 @@ namespace Rise
                         ropeHand.CurrentHold = ropeHold;
                         ropeHand.OwnsRuntimeHold = false;
                         ropeHand.State = HandGrabState.AssistedHold;
-                        ropeHand.WorldTarget = ropeHold.Position;
+                        ropeHand.WorldTarget = GetHoldTarget(ropeHand);
                         ropeHand.HoldDrainTimer = 0f;
                         ropeHand.SlipCheckTimer = 0f;
                         GrabSuccess?.Invoke(ropeHand, ropeHold, FindSurfaceForPoint(ropeHold.Position), ropeHold.Position);
@@ -333,7 +343,7 @@ namespace Rise
             hand.CurrentHold = targetHold;
             hand.OwnsRuntimeHold = targetHold == surfaceGrip;
             hand.State = targetHold.ZeroStaminaHold ? HandGrabState.AssistedHold : HandGrabState.Holding;
-            hand.WorldTarget = targetHold.Position;
+            hand.WorldTarget = GetHoldTarget(hand);
             hand.HoldDrainTimer = 0f;
             hand.SlipCheckTimer = 0f;
             GrabSuccess?.Invoke(hand, targetHold, targetSurface, targetHold.Position);
@@ -465,7 +475,7 @@ namespace Rise
             Vector3 force = delta * holdSpringStrength - velocityAtAnchor * holdSpringDamping;
             force.z = 0f;
             body.AddForceAtPosition(force, anchorWorld, ForceMode.Acceleration);
-            hand.WorldTarget = hand.CurrentHold.Position;
+            hand.WorldTarget = GetHoldTarget(hand);
         }
 
         private void DrainStaminaWhileHolding(HandState hand)
@@ -509,6 +519,12 @@ namespace Rise
             Vector3 velocity = body.linearVelocity;
             velocity.z = 0f;
             body.linearVelocity = velocity;
+
+            Vector3 angularVelocity = body.angularVelocity;
+            angularVelocity.x = 0f;
+            angularVelocity.y = 0f;
+            angularVelocity.z = 0f;
+            body.angularVelocity = angularVelocity;
         }
 
         private void UpdateMouseDrivenTargets()
@@ -521,38 +537,33 @@ namespace Rise
                 worldDelta = new Vector3(mouseDelta.x, mouseDelta.y, 0f) * mouseDeltaWorldScale;
             }
 
-            bool hasAnyHold = LeftHand.HasHold || RightHand.HasHold;
+            bool heldHandDriveRequested = false;
             if (worldDelta.sqrMagnitude > 0.000001f)
             {
-                if (!LeftHand.HasHold)
-                {
-                    LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, LeftHand.WorldTarget + worldDelta);
-                }
-
-                if (!RightHand.HasHold)
-                {
-                    RightHand.WorldTarget = GetReachLimitedTarget(RightHand, RightHand.WorldTarget + worldDelta);
-                }
-
-                if (hasAnyHold)
+                heldHandDriveRequested |= ApplyMouseDeltaToHand(LeftHand, worldDelta);
+                heldHandDriveRequested |= ApplyMouseDeltaToHand(RightHand, worldDelta);
+                if (heldHandDriveRequested)
                 {
                     bodyDriveOffset += worldDelta;
                     bodyDriveOffset = Vector3.ClampMagnitude(bodyDriveOffset, maxBodyDriveOffset);
                     bodyDriveOffset.z = 0f;
                 }
             }
-            else if (hasAnyHold)
+
+            bool hasAnyHold = LeftHand.HasHold || RightHand.HasHold;
+            if (!heldHandDriveRequested && hasAnyHold)
             {
                 bodyDriveOffset = Vector3.MoveTowards(bodyDriveOffset, Vector3.zero, bodyDriveReturnSpeed * Time.deltaTime);
             }
-            else
+
+            if (!hasAnyHold)
             {
                 bodyDriveOffset = Vector3.zero;
             }
 
             if (LeftHand.HasHold)
             {
-                LeftHand.WorldTarget = LeftHand.CurrentHold.Position;
+                LeftHand.WorldTarget = GetHoldTarget(LeftHand);
             }
             else
             {
@@ -561,12 +572,28 @@ namespace Rise
 
             if (RightHand.HasHold)
             {
-                RightHand.WorldTarget = RightHand.CurrentHold.Position;
+                RightHand.WorldTarget = GetHoldTarget(RightHand);
             }
             else
             {
                 RightHand.WorldTarget = GetReachLimitedTarget(RightHand, pointerMode ? CursorWorld : RightHand.WorldTarget);
             }
+        }
+
+        private bool ApplyMouseDeltaToHand(HandState hand, Vector3 worldDelta)
+        {
+            if (!hand.IsPressed)
+            {
+                return false;
+            }
+
+            if (hand.HasHold)
+            {
+                return true;
+            }
+
+            hand.WorldTarget = GetReachLimitedTarget(hand, hand.WorldTarget + worldDelta);
+            return false;
         }
 
         private ClimbHold FindHoveredHold(Vector3 targetWorld)
@@ -716,12 +743,12 @@ namespace Rise
 
             if (offset.sqrMagnitude <= handReachLimit * handReachLimit)
             {
-                desiredTarget.z = 0f;
+                desiredTarget.z = movePlaneZ;
                 return desiredTarget;
             }
 
             Vector3 limited = shoulder + offset.normalized * handReachLimit;
-            limited.z = 0f;
+            limited.z = movePlaneZ;
             return limited;
         }
 
@@ -730,6 +757,13 @@ namespace Rise
             Vector3 desiredAnchorWorld = hand.CurrentHold.Position + bodyDriveOffset;
             desiredAnchorWorld.z = movePlaneZ;
             return desiredAnchorWorld;
+        }
+
+        private Vector3 GetHoldTarget(HandState hand)
+        {
+            Vector3 target = hand.CurrentHold != null ? hand.CurrentHold.Position : hand.WorldTarget;
+            target.z = movePlaneZ;
+            return target;
         }
 
         private Vector3 GetPromptTargetWorld()
@@ -816,6 +850,19 @@ namespace Rise
         public Vector3 GetHandAnchorWorld(HandState hand)
         {
             return transform.position + hand.LocalAnchorOffset;
+        }
+
+        public void SetFreeHandTargetsFromVisuals(Vector3 leftHandWorld, Vector3 rightHandWorld)
+        {
+            if (!LeftHand.HasHold)
+            {
+                LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, leftHandWorld);
+            }
+
+            if (!RightHand.HasHold)
+            {
+                RightHand.WorldTarget = GetReachLimitedTarget(RightHand, rightHandWorld);
+            }
         }
 
         public void BeginRestFreeze(RestPoint restPoint)
