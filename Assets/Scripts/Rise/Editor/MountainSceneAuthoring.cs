@@ -14,6 +14,13 @@ namespace Rise.Editor
         private const string ScenePath = "Assets/Scenes/Mountain.unity";
         private const string LongClimbScenePath = "Assets/Scenes/MountainLongClimb.unity";
         private const string RootName = "RisePrototypeWorld";
+        private const float LongClimbWallCenterX = 0f;
+        private const float LongClimbWallCenterY = 55f;
+        private const float LongClimbWallWidth = 28f;
+        private const float LongClimbWallHeight = 122f;
+        private const float LongClimbWallFrontZ = 0.12f;
+        private const float LongClimbRockFrontZ = -0.06f;
+        private const float LongClimbRockFrontTolerance = 0.035f;
         private static readonly string AutorunFlagPath = Path.GetFullPath(Path.Combine(Application.dataPath, "..", "Temp", "author-mountain-scene.flag"));
         private static bool autorunQueued;
 
@@ -235,8 +242,8 @@ namespace Rise.Editor
             GameObject rockwall = GameObject.CreatePrimitive(PrimitiveType.Cube);
             rockwall.name = "LongClimbRockwall";
             rockwall.transform.SetParent(parent, false);
-            rockwall.transform.position = new Vector3(0f, 55f, 0.18f);
-            rockwall.transform.localScale = new Vector3(28f, 122f, 0.12f);
+            rockwall.transform.position = new Vector3(LongClimbWallCenterX, LongClimbWallCenterY, 0.18f);
+            rockwall.transform.localScale = new Vector3(LongClimbWallWidth, LongClimbWallHeight, 0.12f);
             rockwall.GetComponent<Renderer>().sharedMaterial.color = new Color(0.2f, 0.23f, 0.24f);
             Object.DestroyImmediate(rockwall.GetComponent<BoxCollider>());
         }
@@ -369,13 +376,14 @@ namespace Rise.Editor
             float x = baseScale + (index % 5) * 0.025f;
             float y = baseScale + ((index + 2) % 4) * 0.022f;
             float z = baseScale + ((index + 4) % 3) * 0.018f;
+            float sizeMultiplier = RockSizeMultiplierForIndex(index, shelf);
             if (moss)
             {
                 x += 0.025f;
                 y += 0.018f;
             }
 
-            return new Vector3(x, y, z);
+            return new Vector3(x * sizeMultiplier, y * sizeMultiplier, z * sizeMultiplier);
         }
 
         private static GameObject PlaceRock(Transform parent, GameObject prefab, string name, Vector3 position, Vector3 euler, Vector3 scale)
@@ -386,8 +394,31 @@ namespace Rise.Editor
             rock.transform.position = new Vector3(position.x, position.y, 0f);
             rock.transform.rotation = Quaternion.Euler(euler);
             rock.transform.localScale = scale;
-            NormalizeRockVisualSize(rock, Mathf.Clamp(Mathf.Max(scale.x, scale.y) * 4f, 0.65f, 1.05f));
+            NormalizeRockVisualSize(rock, Mathf.Clamp(Mathf.Max(scale.x, scale.y) * 4f, 0.65f, 4.2f));
+            ClampRockToWallBounds(rock);
+            AlignRockFrontPlane(rock);
             return rock;
+        }
+
+        private static float RockSizeMultiplierForIndex(int index, bool shelf)
+        {
+            if (shelf)
+            {
+                return Mathf.Lerp(0.92f, 1.45f, Hash01(index, 311));
+            }
+
+            float roll = Hash01(index, 137);
+            if (roll < 0.52f)
+            {
+                return Mathf.Lerp(0.82f, 1.35f, Hash01(index, 149));
+            }
+
+            if (roll < 0.84f)
+            {
+                return Mathf.Lerp(1.45f, 2.65f, Hash01(index, 163));
+            }
+
+            return Mathf.Lerp(2.8f, 4f, Hash01(index, 179));
         }
 
         private static void NormalizeRockVisualSize(GameObject rock, float targetMaxDimension)
@@ -412,6 +443,73 @@ namespace Rise.Editor
 
             float factor = targetMaxDimension / maxDimension;
             rock.transform.localScale *= factor;
+        }
+
+        private static void ClampRockToWallBounds(GameObject rock)
+        {
+            if (!TryGetRendererBounds(rock, out Bounds bounds))
+            {
+                return;
+            }
+
+            float halfWidth = LongClimbWallWidth * 0.5f;
+            float halfHeight = LongClimbWallHeight * 0.5f;
+            float minX = LongClimbWallCenterX - halfWidth;
+            float maxX = LongClimbWallCenterX + halfWidth;
+            float minY = LongClimbWallCenterY - halfHeight;
+            float maxY = LongClimbWallCenterY + halfHeight;
+            Vector3 offset = Vector3.zero;
+
+            if (bounds.min.x < minX)
+            {
+                offset.x = minX - bounds.min.x;
+            }
+            else if (bounds.max.x > maxX)
+            {
+                offset.x = maxX - bounds.max.x;
+            }
+
+            if (bounds.min.y < minY)
+            {
+                offset.y = minY - bounds.min.y;
+            }
+            else if (bounds.max.y > maxY)
+            {
+                offset.y = maxY - bounds.max.y;
+            }
+
+            if (offset != Vector3.zero)
+            {
+                rock.transform.position += offset;
+            }
+        }
+
+        private static void AlignRockFrontPlane(GameObject rock)
+        {
+            if (!TryGetRendererBounds(rock, out Bounds bounds))
+            {
+                return;
+            }
+
+            rock.transform.position += new Vector3(0f, 0f, LongClimbRockFrontZ - bounds.min.z);
+        }
+
+        private static bool TryGetRendererBounds(GameObject rock, out Bounds bounds)
+        {
+            Renderer[] renderers = rock.GetComponentsInChildren<Renderer>();
+            if (renderers.Length == 0)
+            {
+                bounds = default;
+                return false;
+            }
+
+            bounds = renderers[0].bounds;
+            for (int i = 1; i < renderers.Length; i++)
+            {
+                bounds.Encapsulate(renderers[i].bounds);
+            }
+
+            return true;
         }
 
         private static void ConfigureRockClimb(GameObject rock, string label, int index)
@@ -488,9 +586,51 @@ namespace Rise.Editor
                 Vector3 position = child.position;
                 if (!Mathf.Approximately(position.z, 0f))
                 {
-                    child.position = new Vector3(position.x, position.y, 0f);
+                    AlignRockFrontPlane(child.gameObject);
                 }
+
+                ClampRockToWallBounds(child.gameObject);
+                ValidateRockBounds(child.gameObject);
             }
+        }
+
+        private static void ValidateRockBounds(GameObject rock)
+        {
+            if (!TryGetRendererBounds(rock, out Bounds bounds))
+            {
+                return;
+            }
+
+            float halfWidth = LongClimbWallWidth * 0.5f;
+            float halfHeight = LongClimbWallHeight * 0.5f;
+            float minX = LongClimbWallCenterX - halfWidth;
+            float maxX = LongClimbWallCenterX + halfWidth;
+            float minY = LongClimbWallCenterY - halfHeight;
+            float maxY = LongClimbWallCenterY + halfHeight;
+
+            if (bounds.min.x < minX || bounds.max.x > maxX || bounds.min.y < minY || bounds.max.y > maxY)
+            {
+                Debug.LogError($"{rock.name} is outside LongClimbRockwall after scaling. Bounds: {bounds}");
+            }
+
+            if (Mathf.Abs(bounds.min.z - LongClimbRockFrontZ) > LongClimbRockFrontTolerance)
+            {
+                Debug.LogError($"{rock.name} front plane mismatch. Expected {LongClimbRockFrontZ:0.###}, got {bounds.min.z:0.###}");
+            }
+
+            if (bounds.max.z < LongClimbWallFrontZ)
+            {
+                Debug.LogError($"{rock.name} does not reach the wall after front-plane alignment. Back z: {bounds.max.z:0.###}");
+            }
+        }
+
+        private static float Hash01(int index, int salt)
+        {
+            uint value = (uint)(index + 1) * 747796405u + (uint)salt * 2891336453u;
+            value = (value >> ((int)(value >> 28) + 4)) ^ value;
+            value *= 277803737u;
+            value = (value >> 22) ^ value;
+            return value / (float)uint.MaxValue;
         }
 
         private static PlayerClimbController BuildPlayer(Transform parent)
