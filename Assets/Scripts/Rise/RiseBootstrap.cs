@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Rise
 {
@@ -9,6 +10,11 @@ namespace Rise
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void EnsureBootstrap()
         {
+            if (ShouldSkipPrototypeBootstrap())
+            {
+                return;
+            }
+
             if (Object.FindAnyObjectByType<RiseBootstrap>() != null)
             {
                 return;
@@ -20,12 +26,23 @@ namespace Rise
 
         private void Start()
         {
+            if (ShouldSkipPrototypeBootstrap())
+            {
+                Destroy(gameObject);
+                return;
+            }
+
             AudioService.EnsureExists();
             BuildPrototype();
         }
 
         private void BuildPrototype()
         {
+            if (ShouldSkipPrototypeBootstrap())
+            {
+                return;
+            }
+
             if (Object.FindAnyObjectByType<PlayerClimbController>() != null)
             {
                 return;
@@ -53,6 +70,17 @@ namespace Rise
             PlayerClimbController player = BuildPlayer(root.transform, sceneCamera);
             BuildHud(root.transform, player);
             ConfigureCamera(sceneCamera, player.transform);
+        }
+
+        private static bool ShouldSkipPrototypeBootstrap()
+        {
+            Scene activeScene = SceneManager.GetActiveScene();
+            if (activeScene.IsValid() && (activeScene.name == "Start" || activeScene.path == "Assets/Scenes/Start.unity"))
+            {
+                return true;
+            }
+
+            return Object.FindAnyObjectByType<StartMenuController>() != null;
         }
 
         private static void BuildBackdrop(Transform parent)
