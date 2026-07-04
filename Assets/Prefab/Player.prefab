@@ -15,6 +15,7 @@ GameObject:
   - component: {fileID: 1187058171850088860}
   - component: {fileID: 1502917893274282916}
   - component: {fileID: 1216470681356917201}
+  - component: {fileID: 1147734482440138488}
   m_Layer: 0
   m_Name: Player
   m_TagString: Untagged
@@ -86,7 +87,7 @@ Rigidbody:
   m_UseGravity: 1
   m_IsKinematic: 0
   m_Interpolate: 1
-  m_Constraints: 160
+  m_Constraints: 116
   m_CollisionDetection: 0
 --- !u!114 &951846055515032360
 MonoBehaviour:
@@ -102,7 +103,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   stamina: 100
   hunger: 100
-  cold: 15
+  warmth: 100
   sanity: 100
   health: 100
 --- !u!114 &1187058171850088860
@@ -168,11 +169,26 @@ MonoBehaviour:
   rightHandBone: {fileID: 8023423491410592904}
   leftUpperLeg: {fileID: 3974947651039595403}
   rightUpperLeg: {fileID: 3913553959805106269}
-  rootFollowOffset: {x: 0, y: -0.95, z: 0}
+  rootFollowOffset: {x: 0, y: 0, z: 0}
   leftHandTargetOffset: {x: 0, y: 0, z: 0}
   rightHandTargetOffset: {x: 0, y: 0, z: 0}
-  leftHandRotationOffset: {x: 0, y: 0, z: -90}
-  rightHandRotationOffset: {x: 0, y: 0, z: -90}
+  leftHandRotationOffset: {x: 0, y: 0, z: 0}
+  rightHandRotationOffset: {x: 0, y: 0, z: 0}
+--- !u!114 &1147734482440138488
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4326338099686035201}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3210a4e8710aedf4ea1d1acd88d0f85a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::Rise.PlayerInventory
+  lightLimit: 14
+  mediumLimit: 26
+  heavyLimit: 38
 --- !u!1001 &1932849756296854804
 PrefabInstance:
   m_ObjectHideFlags: 0
