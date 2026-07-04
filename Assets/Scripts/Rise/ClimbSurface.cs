@@ -96,6 +96,33 @@ namespace Rise
             return true;
         }
 
+        public bool TryGetSupportPoint(Vector3 footWorld, float horizontalReach, float verticalReach, out Vector3 supportPoint)
+        {
+            Collider targetCollider = GetCollider();
+            if (targetCollider == null)
+            {
+                supportPoint = default;
+                return false;
+            }
+
+            Bounds bounds = targetCollider.bounds;
+            float clampedX = Mathf.Clamp(footWorld.x, bounds.min.x, bounds.max.x);
+            float dx = Mathf.Abs(footWorld.x - clampedX);
+            float topY = bounds.max.y;
+            bool isAboveSurface = footWorld.y >= topY - 0.05f;
+            float verticalDrop = footWorld.y - topY;
+
+            if (dx > horizontalReach || !isAboveSurface || verticalDrop > verticalReach)
+            {
+                supportPoint = default;
+                return false;
+            }
+
+            supportPoint = new Vector3(clampedX, topY, 0f);
+            return true;
+        }
+
+
         private bool TryGetRaycastGripPoint(Collider targetCollider, Vector3 targetWorld, out Vector3 gripPoint)
         {
             float probeDepth = Mathf.Max(gripProbeDepth, 0.1f);

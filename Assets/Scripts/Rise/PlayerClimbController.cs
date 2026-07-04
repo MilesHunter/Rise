@@ -25,6 +25,17 @@ namespace Rise
         [SerializeField] private float restDuration = 1.15f;
         [SerializeField] private float surfaceGrabTolerance = 0.9f;
         [SerializeField] private float handReachLimit = 2.35f;
+        [SerializeField] private Vector3 leftFreeHandRestOffset = new Vector3(-0.75f, 0.25f, 0f);
+        [SerializeField] private Vector3 rightFreeHandRestOffset = new Vector3(0.75f, 0.25f, 0f);
+        [SerializeField] private float freeHandReturnSpeed = 8f;
+        [SerializeField] private Vector3 leftFootSupportOffset = new Vector3(-0.22f, -0.95f, 0f);
+        [SerializeField] private Vector3 rightFootSupportOffset = new Vector3(0.22f, -0.95f, 0f);
+        [SerializeField] private float footSupportHorizontalReach = 0.55f;
+        [SerializeField] private float footSupportVerticalReach = 0.75f;
+        [SerializeField] private float footSupportHeight = 0.06f;
+        [SerializeField] private float footSupportSpringStrength = 75f;
+        [SerializeField] private float footSupportDamping = 11f;
+        [SerializeField] private float maxFootSupportAcceleration = 28f;
 
         private Rigidbody body;
         private Camera mainCamera;
@@ -74,7 +85,10 @@ namespace Rise
         private void Awake()
         {
             EnsureInitialized(transform.parent != null ? transform.parent : transform);
-            body.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
+            body.constraints = RigidbodyConstraints.FreezePositionZ |
+                               RigidbodyConstraints.FreezeRotationX |
+                               RigidbodyConstraints.FreezeRotationY |
+                               RigidbodyConstraints.FreezeRotationZ;
         }
 
         private void OnEnable()
@@ -118,6 +132,7 @@ namespace Rise
             ConstrainToPlane();
             ApplyHoldForce(LeftHand);
             ApplyHoldForce(RightHand);
+            ApplyFootSupport();
             DrainStaminaWhileHolding(LeftHand);
             DrainStaminaWhileHolding(RightHand);
 
@@ -222,7 +237,14 @@ namespace Rise
                 return;
             }
 
-            hand.WorldTarget = hand.HasHold ? hand.CurrentHold.Position : GetReachLimitedTarget(hand, hand.WorldTarget);
+            if (hand.HasHold)
+            {
+                hand.WorldTarget = GetHoldTarget(hand);
+            }
+            else
+            {
+                hand.WorldTarget = GetReachLimitedTarget(hand, hand.WorldTarget);
+            }
 
             if (pressed)
             {
@@ -268,7 +290,7 @@ namespace Rise
                         ropeHand.CurrentHold = ropeHold;
                         ropeHand.OwnsRuntimeHold = false;
                         ropeHand.State = HandGrabState.AssistedHold;
-                        ropeHand.WorldTarget = ropeHold.Position;
+                        ropeHand.WorldTarget = GetHoldTarget(ropeHand);
                         ropeHand.HoldDrainTimer = 0f;
                         ropeHand.SlipCheckTimer = 0f;
                         GrabSuccess?.Invoke(ropeHand, ropeHold, FindSurfaceForPoint(ropeHold.Position), ropeHold.Position);
@@ -333,7 +355,7 @@ namespace Rise
             hand.CurrentHold = targetHold;
             hand.OwnsRuntimeHold = targetHold == surfaceGrip;
             hand.State = targetHold.ZeroStaminaHold ? HandGrabState.AssistedHold : HandGrabState.Holding;
-            hand.WorldTarget = targetHold.Position;
+            hand.WorldTarget = GetHoldTarget(hand);
             hand.HoldDrainTimer = 0f;
             hand.SlipCheckTimer = 0f;
             GrabSuccess?.Invoke(hand, targetHold, targetSurface, targetHold.Position);
@@ -465,7 +487,7 @@ namespace Rise
             Vector3 force = delta * holdSpringStrength - velocityAtAnchor * holdSpringDamping;
             force.z = 0f;
             body.AddForceAtPosition(force, anchorWorld, ForceMode.Acceleration);
-            hand.WorldTarget = hand.CurrentHold.Position;
+            hand.WorldTarget = GetHoldTarget(hand);
         }
 
         private void DrainStaminaWhileHolding(HandState hand)
@@ -495,6 +517,68 @@ namespace Rise
             UpdateSlip(hand);
         }
 
+        private void ApplyFootSupport()
+        {
+            if (IsRestLocked || hasWon || body.isKinematic)
+            {
+                return;
+            }
+
+            bool leftSupported = TryApplyFootSupport(leftFootSupportOffset);
+            bool rightSupported = TryApplyFootSupport(rightFootSupportOffset);
+            if (!leftSupported && !rightSupported)
+            {
+                return;
+            }
+        }
+
+        private bool TryApplyFootSupport(Vector3 localFootOffset)
+        {
+            Vector3 footWorld = transform.position + localFootOffset;
+            footWorld.z = movePlaneZ;
+
+            if (!TryFindBestFootSupport(footWorld, out Vector3 supportPoint))
+            {
+                return false;
+            }
+
+            float desiredFootY = supportPoint.y + footSupportHeight;
+            float compression = desiredFootY - footWorld.y;
+            if (compression <= 0f)
+            {
+                return true;
+            }
+
+            float downwardVelocity = Mathf.Max(0f, -body.GetPointVelocity(footWorld).y);
+            float upwardAcceleration = compression * footSupportSpringStrength + downwardVelocity * footSupportDamping;
+            upwardAcceleration = Mathf.Min(upwardAcceleration, maxFootSupportAcceleration);
+            body.AddForce(Vector3.up * upwardAcceleration, ForceMode.Acceleration);
+            return true;
+        }
+
+        private bool TryFindBestFootSupport(Vector3 footWorld, out Vector3 bestPoint)
+        {
+            bestPoint = Vector3.zero;
+            float bestDistance = float.MaxValue;
+
+            foreach (ClimbSurface surface in ClimbSurface.ActiveSurfaces)
+            {
+                if (surface == null || !surface.TryGetSupportPoint(footWorld, footSupportHorizontalReach, footSupportVerticalReach, out Vector3 supportPoint))
+                {
+                    continue;
+                }
+
+                float distance = Vector2.Distance(new Vector2(footWorld.x, footWorld.y), new Vector2(supportPoint.x, supportPoint.y));
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestPoint = supportPoint;
+                }
+            }
+
+            return bestDistance < float.MaxValue;
+        }
+
         private void ConstrainToPlane()
         {
             Vector3 position = body.position;
@@ -509,6 +593,12 @@ namespace Rise
             Vector3 velocity = body.linearVelocity;
             velocity.z = 0f;
             body.linearVelocity = velocity;
+
+            Vector3 angularVelocity = body.angularVelocity;
+            angularVelocity.x = 0f;
+            angularVelocity.y = 0f;
+            angularVelocity.z = 0f;
+            body.angularVelocity = angularVelocity;
         }
 
         private void UpdateMouseDrivenTargets()
@@ -521,52 +611,76 @@ namespace Rise
                 worldDelta = new Vector3(mouseDelta.x, mouseDelta.y, 0f) * mouseDeltaWorldScale;
             }
 
-            bool hasAnyHold = LeftHand.HasHold || RightHand.HasHold;
+            bool heldHandDriveRequested = false;
             if (worldDelta.sqrMagnitude > 0.000001f)
             {
-                if (!LeftHand.HasHold)
-                {
-                    LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, LeftHand.WorldTarget + worldDelta);
-                }
-
-                if (!RightHand.HasHold)
-                {
-                    RightHand.WorldTarget = GetReachLimitedTarget(RightHand, RightHand.WorldTarget + worldDelta);
-                }
-
-                if (hasAnyHold)
+                heldHandDriveRequested |= ApplyMouseDeltaToHand(LeftHand, worldDelta);
+                heldHandDriveRequested |= ApplyMouseDeltaToHand(RightHand, worldDelta);
+                if (heldHandDriveRequested)
                 {
                     bodyDriveOffset += worldDelta;
                     bodyDriveOffset = Vector3.ClampMagnitude(bodyDriveOffset, maxBodyDriveOffset);
                     bodyDriveOffset.z = 0f;
                 }
             }
-            else if (hasAnyHold)
+
+            bool hasAnyHold = LeftHand.HasHold || RightHand.HasHold;
+            if (!heldHandDriveRequested && hasAnyHold)
             {
                 bodyDriveOffset = Vector3.MoveTowards(bodyDriveOffset, Vector3.zero, bodyDriveReturnSpeed * Time.deltaTime);
             }
-            else
+
+            if (!hasAnyHold)
             {
                 bodyDriveOffset = Vector3.zero;
             }
 
             if (LeftHand.HasHold)
             {
-                LeftHand.WorldTarget = LeftHand.CurrentHold.Position;
+                LeftHand.WorldTarget = GetHoldTarget(LeftHand);
             }
             else
             {
-                LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, pointerMode ? CursorWorld : LeftHand.WorldTarget);
+                LeftHand.WorldTarget = UpdateFreeHandTarget(LeftHand, pointerMode);
             }
 
             if (RightHand.HasHold)
             {
-                RightHand.WorldTarget = RightHand.CurrentHold.Position;
+                RightHand.WorldTarget = GetHoldTarget(RightHand);
             }
             else
             {
-                RightHand.WorldTarget = GetReachLimitedTarget(RightHand, pointerMode ? CursorWorld : RightHand.WorldTarget);
+                RightHand.WorldTarget = UpdateFreeHandTarget(RightHand, pointerMode);
             }
+        }
+
+        private Vector3 UpdateFreeHandTarget(HandState hand, bool pointerMode)
+        {
+            if (pointerMode)
+            {
+                return GetReachLimitedTarget(hand, CursorWorld);
+            }
+
+            Vector3 target = hand.IsPressed
+                ? hand.WorldTarget
+                : Vector3.MoveTowards(hand.WorldTarget, GetFreeHandRestTarget(hand), freeHandReturnSpeed * Time.deltaTime);
+            return GetReachLimitedTarget(hand, target);
+        }
+
+        private bool ApplyMouseDeltaToHand(HandState hand, Vector3 worldDelta)
+        {
+            if (!hand.IsPressed)
+            {
+                return false;
+            }
+
+            if (hand.HasHold)
+            {
+                return true;
+            }
+
+            hand.WorldTarget = GetReachLimitedTarget(hand, hand.WorldTarget + worldDelta);
+            return false;
         }
 
         private ClimbHold FindHoveredHold(Vector3 targetWorld)
@@ -716,12 +830,12 @@ namespace Rise
 
             if (offset.sqrMagnitude <= handReachLimit * handReachLimit)
             {
-                desiredTarget.z = 0f;
+                desiredTarget.z = movePlaneZ;
                 return desiredTarget;
             }
 
             Vector3 limited = shoulder + offset.normalized * handReachLimit;
-            limited.z = 0f;
+            limited.z = movePlaneZ;
             return limited;
         }
 
@@ -730,6 +844,13 @@ namespace Rise
             Vector3 desiredAnchorWorld = hand.CurrentHold.Position + bodyDriveOffset;
             desiredAnchorWorld.z = movePlaneZ;
             return desiredAnchorWorld;
+        }
+
+        private Vector3 GetHoldTarget(HandState hand)
+        {
+            Vector3 target = hand.CurrentHold != null ? hand.CurrentHold.Position : hand.WorldTarget;
+            target.z = movePlaneZ;
+            return target;
         }
 
         private Vector3 GetPromptTargetWorld()
@@ -756,11 +877,18 @@ namespace Rise
 
         private void ResetFreeHandTargets()
         {
-            LeftHand.WorldTarget = transform.position + LeftHand.LocalAnchorOffset;
-            RightHand.WorldTarget = transform.position + RightHand.LocalAnchorOffset;
+            LeftHand.WorldTarget = GetFreeHandRestTarget(LeftHand);
+            RightHand.WorldTarget = GetFreeHandRestTarget(RightHand);
 
             LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, LeftHand.WorldTarget);
             RightHand.WorldTarget = GetReachLimitedTarget(RightHand, RightHand.WorldTarget);
+        }
+
+        private Vector3 GetFreeHandRestTarget(HandState hand)
+        {
+            Vector3 target = transform.position + (hand.IsLeft ? leftFreeHandRestOffset : rightFreeHandRestOffset);
+            target.z = movePlaneZ;
+            return target;
         }
 
         private void EnsureInitialized(Transform generatedRoot)
