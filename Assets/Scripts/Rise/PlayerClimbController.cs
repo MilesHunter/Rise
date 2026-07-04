@@ -1,4 +1,5 @@
 using System.Collections;
+using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Random = UnityEngine.Random;
@@ -33,6 +34,7 @@ namespace Rise
         private Coroutine restRoutine;
         private bool hasWon;
         private bool initialized;
+        private AudioCueId activeBreathingCue;
 
         public HandState LeftHand { get; } = new HandState { DisplayName = "Left", IsLeft = true, LocalAnchorOffset = new Vector3(-0.45f, 0.55f, 0f) };
         public HandState RightHand { get; } = new HandState { DisplayName = "Right", IsLeft = false, LocalAnchorOffset = new Vector3(0.45f, 0.55f, 0f) };
@@ -45,6 +47,16 @@ namespace Rise
         public float LeftKickVisual { get; private set; }
         public float RightKickVisual { get; private set; }
         public float HandReachLimit => handReachLimit;
+        public event Action<HandState, ClimbHold, ClimbSurface, Vector3> GrabSuccess;
+        public event Action<HandState, Vector3> GrabFailed;
+        public event Action<HandState, ClimbHold, ClimbSurface, Vector3> HoldReleased;
+        public event Action<HandState, ClimbHold, ClimbSurface, Vector3> SlipOccurred;
+        public event Action<bool, Vector3> KickPerformed;
+        public event Action<RestPointType, Vector3> RestStarted;
+        public event Action<RestPointType, Vector3> RestCompleted;
+        public event Action<Vector3> Respawned;
+        public event Action<Vector3> GoalReached;
+        public event Action<AudioCueId> BreathingStateChanged;
 
         public void Initialize(Camera sceneCamera, Vector3 spawnPoint, Transform generatedRoot)
         {
@@ -71,6 +83,7 @@ namespace Rise
             UpdateRestInput();
             UpdatePrompt();
             DecayKickVisuals();
+            UpdateBreathingState();
         }
 
         private void FixedUpdate()
@@ -99,6 +112,7 @@ namespace Rise
                 currentGoalPoint = goalPoint;
                 hasWon = true;
                 CurrentPrompt = goalPoint.PromptText;
+                GoalReached?.Invoke(goalPoint.transform.position);
             }
         }
 
@@ -190,9 +204,11 @@ namespace Rise
         private void TryGrabHand(HandState hand, ClimbHold hoveredHold, ClimbHold surfaceGrip)
         {
             ClimbHold targetHold = hoveredHold != null ? hoveredHold : surfaceGrip;
+            ClimbSurface targetSurface = hoveredHold == null ? FindSurfaceForPoint(targetHold != null ? targetHold.Position : hand.WorldTarget) : null;
             if (targetHold == null)
             {
                 hand.State = HandGrabState.Reach;
+                GrabFailed?.Invoke(hand, hand.WorldTarget);
                 return;
             }
 
@@ -201,6 +217,7 @@ namespace Rise
             {
                 hand.State = HandGrabState.Reach;
                 ReleaseRuntimeHoldIfNeeded(surfaceGrip);
+                GrabFailed?.Invoke(hand, targetHold.Position);
                 return;
             }
 
@@ -208,6 +225,7 @@ namespace Rise
             if (!Vitals.TrySpendStamina(grabCost))
             {
                 ReleaseRuntimeHoldIfNeeded(surfaceGrip);
+                GrabFailed?.Invoke(hand, targetHold.Position);
                 return;
             }
 
@@ -227,12 +245,15 @@ namespace Rise
             hand.WorldTarget = targetHold.Position;
             hand.HoldDrainTimer = 0f;
             hand.SlipCheckTimer = 0f;
+            GrabSuccess?.Invoke(hand, targetHold, targetSurface, targetHold.Position);
         }
 
         private void ReleaseHand(HandState hand)
         {
             hand.State = HandGrabState.Releasing;
             Vector3 releasedTarget = hand.CurrentHold != null ? hand.CurrentHold.Position : hand.WorldTarget;
+            ClimbHold releasedHold = hand.CurrentHold;
+            ClimbSurface releasedSurface = FindSurfaceForPoint(releasedTarget);
             if (hand.OwnsRuntimeHold && hand.CurrentHold != null)
             {
                 Destroy(hand.CurrentHold.gameObject);
@@ -243,6 +264,7 @@ namespace Rise
             hand.SlipCheckTimer = 0f;
             hand.WorldTarget = GetReachLimitedTarget(hand, releasedTarget);
             hand.State = HandGrabState.Idle;
+            HoldReleased?.Invoke(hand, releasedHold, releasedSurface, releasedTarget);
         }
 
         private void UpdateKickInput()
@@ -262,12 +284,14 @@ namespace Rise
             {
                 body.AddForce(new Vector3(-1.2f, 2.5f, 0f).normalized * kickForce, ForceMode.Impulse);
                 LeftKickVisual = 1f;
+                KickPerformed?.Invoke(true, transform.position + new Vector3(-0.35f, 0.25f, 0f));
             }
 
             if (Keyboard.current.eKey.wasPressedThisFrame && Vitals.TrySpendStamina(4f))
             {
                 body.AddForce(new Vector3(1.2f, 2.5f, 0f).normalized * kickForce, ForceMode.Impulse);
                 RightKickVisual = 1f;
+                KickPerformed?.Invoke(false, transform.position + new Vector3(0.35f, 0.25f, 0f));
             }
         }
 
@@ -290,6 +314,7 @@ namespace Rise
             ReleaseHand(RightHand);
             body.isKinematic = true;
             CurrentPrompt = restPoint.PromptText;
+            RestStarted?.Invoke(restPoint.RestType, restPoint.transform.position);
             yield return new WaitForSeconds(restDuration);
 
             if (restPoint.RestType == RestPointType.ShortRest)
@@ -304,6 +329,7 @@ namespace Rise
 
             body.isKinematic = false;
             restRoutine = null;
+            RestCompleted?.Invoke(restPoint.RestType, restPoint.transform.position);
         }
 
         private void UpdatePrompt()
@@ -550,7 +576,11 @@ namespace Rise
             hand.SlipCheckTimer -= hand.CurrentHold.SlipCheckInterval;
             if (Random.value <= hand.CurrentHold.SlipChance)
             {
+                ClimbHold slippingHold = hand.CurrentHold;
+                Vector3 slipPoint = slippingHold.Position;
+                ClimbSurface slipSurface = FindSurfaceForPoint(slipPoint);
                 ReleaseHand(hand);
+                SlipOccurred?.Invoke(hand, slippingHold, slipSurface, slipPoint);
             }
         }
 
@@ -577,6 +607,7 @@ namespace Rise
                 body.linearVelocity = Vector3.zero;
             }
             Vitals.ResetToCheckpoint();
+            Respawned?.Invoke(checkpoint);
         }
 
         private void DecayKickVisuals()
@@ -656,6 +687,50 @@ namespace Rise
                 ResetFreeHandTargets();
                 initialized = true;
             }
+        }
+
+        private void UpdateBreathingState()
+        {
+            AudioCueId nextCue = AudioCueId.None;
+            if (restRoutine == null && !hasWon)
+            {
+                bool isHoldingOrMovingHard = LeftHand.HasHold || RightHand.HasHold || body.linearVelocity.sqrMagnitude > 4f;
+                if (Vitals.LowStamina && isHoldingOrMovingHard)
+                {
+                    nextCue = AudioCueId.BreathingHeavyLoop;
+                }
+                else if (isHoldingOrMovingHard)
+                {
+                    nextCue = AudioCueId.BreathingLightLoop;
+                }
+            }
+
+            if (activeBreathingCue == nextCue)
+            {
+                return;
+            }
+
+            activeBreathingCue = nextCue;
+            BreathingStateChanged?.Invoke(nextCue);
+        }
+
+        private ClimbSurface FindSurfaceForPoint(Vector3 point)
+        {
+            for (int i = 0; i < ClimbSurface.ActiveSurfaces.Count; i++)
+            {
+                ClimbSurface surface = ClimbSurface.ActiveSurfaces[i];
+                if (surface == null || !surface.TryGetGripPoint(point, out Vector3 gripPoint))
+                {
+                    continue;
+                }
+
+                if (Vector2.Distance(new Vector2(point.x, point.y), new Vector2(gripPoint.x, gripPoint.y)) <= surfaceGrabTolerance + 0.05f)
+                {
+                    return surface;
+                }
+            }
+
+            return null;
         }
     }
 }

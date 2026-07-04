@@ -1,4 +1,6 @@
 using UnityEngine;
+using System;
+using Object = UnityEngine.Object;
 
 namespace Rise
 {
@@ -13,6 +15,8 @@ namespace Rise
         private ClimbHold activeAnchor;
         private GameObject activeRopeRoot;
         private GameObject generatedRoot;
+
+        public event Action<ToolKind, Vector3> ToolPlaced;
 
         public ToolKind SelectedTool => selectedTool;
         public bool ToolMode => toolMode;
@@ -110,6 +114,7 @@ namespace Rise
 
             activeAnchor = anchorObject.AddComponent<ClimbHold>();
             activeAnchor.Configure(ClimbHoldType.Anchor, true, true, 0f, 0f, 0f, 0f, "Anchor");
+            ToolPlaced?.Invoke(ToolKind.Anchor, anchorObject.transform.position);
             return true;
         }
 
@@ -159,6 +164,7 @@ namespace Rise
                 hold.Configure(ClimbHoldType.Rope, true, true, 0f, 0f, 0f, 0f, "Rope");
             }
 
+            ToolPlaced?.Invoke(ToolKind.Rope, target);
             return true;
         }
     }

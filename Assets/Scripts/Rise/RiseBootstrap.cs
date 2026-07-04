@@ -20,6 +20,7 @@ namespace Rise
 
         private void Start()
         {
+            AudioService.EnsureExists();
             BuildPrototype();
         }
 
@@ -109,14 +110,26 @@ namespace Rise
             body.interpolation = RigidbodyInterpolation.Interpolate;
 
             playerObject.AddComponent<PlayerVitals>();
-            playerObject.AddComponent<ToolController>();
+            ToolController toolController = playerObject.AddComponent<ToolController>();
             PlayerClimbController controller = playerObject.AddComponent<PlayerClimbController>();
+            playerObject.AddComponent<PlayerAudioBridge>();
             controller.Initialize(sceneCamera, new Vector3(-4.5f, 0.2f, 0f), parent);
 
             GameObject presentationObject = new GameObject("CharacterPresentation");
             presentationObject.transform.SetParent(parent, false);
             CharacterPresentation presentation = presentationObject.AddComponent<CharacterPresentation>();
             presentation.Initialize(controller);
+
+            toolController.ToolPlaced += (toolKind, position) =>
+            {
+                AudioService service = AudioService.Instance;
+                if (service == null)
+                {
+                    return;
+                }
+
+                service.Play3D(toolKind == ToolKind.Anchor ? AudioCueId.AnchorPlace : AudioCueId.RopePlace, position);
+            };
 
             return controller;
         }

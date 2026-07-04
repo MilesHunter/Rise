@@ -191,14 +191,16 @@ namespace Rise
             }
 
             if (chest == null) chest = FindBoneByName(instance.transform, "chest", "spine", "upperchest");
-            if (leftUpperArm == null) leftUpperArm = FindBoneByName(instance.transform, "leftupperarm", "upperarm_l", "l_upperarm", "leftarm");
-            if (leftLowerArm == null) leftLowerArm = FindBoneByName(instance.transform, "leftlowerarm", "lowerarm_l", "l_forearm", "leftforearm");
-            if (rightUpperArm == null) rightUpperArm = FindBoneByName(instance.transform, "rightupperarm", "upperarm_r", "r_upperarm", "rightarm");
-            if (rightLowerArm == null) rightLowerArm = FindBoneByName(instance.transform, "rightlowerarm", "lowerarm_r", "r_forearm", "rightforearm");
-            if (leftUpperLeg == null) leftUpperLeg = FindBoneByName(instance.transform, "leftupperleg", "upleg_l", "l_thigh", "leftthigh");
-            if (rightUpperLeg == null) rightUpperLeg = FindBoneByName(instance.transform, "rightupperleg", "upleg_r", "r_thigh", "rightthigh");
-            if (leftHandBone == null) leftHandBone = FindBoneByName(instance.transform, "lefthand", "hand_l", "l_hand");
-            if (rightHandBone == null) rightHandBone = FindBoneByName(instance.transform, "righthand", "hand_r", "r_hand");
+            if (leftUpperArm == null) leftUpperArm = FindBoneByName(instance.transform, "leftupperarm", "upperarm_l", "l_upperarm", "leftarm", "upper_arm.l");
+            if (leftLowerArm == null) leftLowerArm = FindBoneByName(instance.transform, "leftlowerarm", "lowerarm_l", "l_forearm", "leftforearm", "lower_arm.l", "forearm.l");
+            if (rightUpperArm == null) rightUpperArm = FindBoneByName(instance.transform, "rightupperarm", "upperarm_r", "r_upperarm", "rightarm", "upper_arm.r");
+            if (rightLowerArm == null) rightLowerArm = FindBoneByName(instance.transform, "rightlowerarm", "lowerarm_r", "r_forearm", "rightforearm", "lower_arm.r", "forearm.r");
+            if (leftUpperLeg == null) leftUpperLeg = FindBoneByName(instance.transform, "leftupperleg", "upleg_l", "l_thigh", "leftthigh", "upper_leg.l", "thigh.l");
+            if (rightUpperLeg == null) rightUpperLeg = FindBoneByName(instance.transform, "rightupperleg", "upleg_r", "r_thigh", "rightthigh", "upper_leg.r", "thigh.r");
+            if (leftHandBone == null) leftHandBone = FindBoneByName(instance.transform, "lefthand", "hand_l", "l_hand", "hand.l");
+            if (rightHandBone == null) rightHandBone = FindBoneByName(instance.transform, "righthand", "hand_r", "r_hand", "hand.r");
+            if (leftHandBone == null) leftHandBone = FindFirstChildBone(leftLowerArm);
+            if (rightHandBone == null) rightHandBone = FindFirstChildBone(rightLowerArm);
 
             if (chest != null) chestInitialLocalRotation = chest.localRotation;
             if (leftUpperArm != null) leftUpperArmInitialLocalRotation = leftUpperArm.localRotation;
@@ -265,6 +267,25 @@ namespace Rise
                     {
                         return all[i];
                     }
+                }
+            }
+
+            return null;
+        }
+
+        private static Transform FindFirstChildBone(Transform parentBone)
+        {
+            if (parentBone == null || parentBone.childCount == 0)
+            {
+                return null;
+            }
+
+            for (int i = 0; i < parentBone.childCount; i++)
+            {
+                Transform child = parentBone.GetChild(i);
+                if (child != null)
+                {
+                    return child;
                 }
             }
 
