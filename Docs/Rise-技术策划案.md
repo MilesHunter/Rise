@@ -1,96 +1,181 @@
-# Rise — Technical Design Document
+# Rise 技术策划案
 
-## Scope
-This document focuses on the shipping implementation for climbing input, momentum, tool states, rest points, scene composition, UI, and audio hooks.
+## 0. 当前工程位置说明
 
----
+- 当前 Unity 工程根目录：`E:\数据库\rise\rise\Rise`
+- 当前脚本目录：`E:\数据库\rise\rise\Rise\Assets\Scripts\Rise`
+- 当前文档目录：`E:\数据库\rise\rise\Rise\Docs`
+- 旧路径 `E:\数据库\rise\project\Rise` 不再作为当前实现路径，只能作为历史参考，不应继续写入新代码或新文档。
 
-## 1. Project Goal
-Deliver a playable mountain-climbing experience in which the player controls both hands with the mouse, uses leg kicks and inertia to gain height, and manages a small set of tool and rest decisions.
-
-- Core loop: observe holds, grab, swing, kick, relocate, and recover at rest points.
-- The game must remain understandable from the first minute and still have tension near the summit.
-- All systems should support the feeling of climbing, fatigue, and risk instead of competing with it.
+本文档面向 40 小时后可交付版本，目标是把攀爬、体力、道具、休息、背包资源管理和地图制作约束整理成可直接实现的技术说明。
 
 ---
 
-## 2. System Overview
-| System | Responsibility | Notes |
-|--------|---------------|-------|
-| Input | Mouse hand control, Q/E leg kicks, W tool equip, scroll tool switching | All input must be readable and low friction |
-| Movement | Body physics, hand grabs, swing momentum, piton rescue | Inertia must matter |
-| Tools | Anchor and rope | Both modify route safety |
-| Rest | Short rest and long rest at designated points | Some points only allow short rest |
-| UI | Stamina, health, sanity, hunger, cold, tool state, prompts | Minimal and persistent |
-| Audio | Climb foley, swing, tool feedback, ambience, summit/fail stings | Primary feedback channel |
+## 1. 项目目标
+
+做一个对标 *A Difficult Game About Climbing* 的短流程攀爬游戏，但加入轻量资源管理和道具取舍。
+
+- 玩家用鼠标控制左右手抓取、移动和甩动身体。
+- Q/E 分别对应左右腿蹬腿，用动量辅助越过难点。
+- 体力是短期攀爬资源，基础值 100。
+- 长期状态不是体力，而是健康、饥饿、温暖、理智。
+- 背包系统负责制造路线前的取舍：带更多补给更安全，但重量会影响攀爬。
+- 地图目标是熟练玩家约 10 分钟通关，中途设置少量明确门槛和补给分支。
 
 ---
 
-## 3. Player Rules
-| Item | Rule |
-|------|------|
-| Base stamina | 100 |
-| Grab cost | 2 stamina per successful grab |
-| Hold drain | 1 stamina per second per hand while holding |
-| Leg kick | Q and E consume a small amount of stamina and add momentum |
-| Anchor | Next grab after equip places an anchor; grabbing and holding the anchor costs 0 stamina |
-| Rope | Equip with W and mouse wheel; choose a landing point in range, fire rope, and then grab rope points for 0 stamina |
+## 2. 当前代码结构对齐
 
-- Two hands can be active independently.
-- Momentum should carry the body when the player swings a stable arm or uses both legs.
-- Low stamina should make the character less stable but not unplayable.
+| 脚本 | 当前职责 | 后续接入点 |
+|---|---|---|
+| `PlayerClimbController.cs` | 攀爬输入、抓取、蹬腿、惯性、休息触发 | 只接收背包重量修正、工具可用数量，不直接管理物品格子 |
+| `PlayerVitals.cs` | 体力、健康、饥饿、温暖、理智 | 保留短期体力；新增长期状态变化接口和物品效果接口 |
+| `ToolController.cs` | 锚点、攀山绳装备和生成 | 改为从背包消耗锚点/绳索物品，数量不足时禁止装备 |
+| `RestPoint.cs` | 短休息/长休息点数据 | 长休息开放整理背包、烹饪、保存；短休息只恢复攀爬体力 |
+| `GameHUDPresenter.cs` | HUD 文本和状态显示 | 增加背包摘要、重量等级、道具数量和长期状态提示 |
+| `RiseTypes.cs` | 枚举和手部状态 | 增加物品分类、重量等级、资源点类型等枚举 |
 
----
-
-## 4. Rest Point Rules
-The map contains several fixed rest locations. When the player enters the area, a prompt appears and the rest type is determined by the point definition.
-
-| Type | Prompt | Effect | Restriction |
-|------|--------|--------|-------------|
-| Short rest point | Can short rest | Recover stamina and reduce pressure | No save and no major recovery |
-| Long rest point | Can long rest | Save, cook, and recover major states | Must be a safe camp or designated long-rest node |
-| Short-only point | Short rest only | Recover stamina with limited relief | No long rest |
+实现原则：背包、资源点、烹饪和掉落表应作为独立模块加入，攀爬控制器只读取结果，避免变成全局大类。
 
 ---
 
-## 5. Level Design Requirements
-- Stone blocks are the basic map kit and must support repeated modular assembly.
-- Include platform pieces, ice pieces, anchor-ready surfaces, camp bases, summit marker, sky backdrop, and weather layers.
-- Rest points, resource points, and the summit must be visually distinct from generic climbing stones.
+## 3. 核心系统概览
+
+| 系统 | 责任 | 关键约束 |
+|---|---|---|
+| 输入系统 | 鼠标双手、Q/E 蹬腿、W 装备、滚轮切换 | 操作必须少而稳定 |
+| 攀爬系统 | 抓取、保持、甩动、蹬腿、下坠回滚 | 惯性和重量要能被感觉到 |
+| 体力系统 | 100 点短期攀爬体力 | 抓取 -2，每只手保持 -1/秒 |
+| 长期状态 | 健康、饥饿、温暖、理智 | 不替代体力，用来制造路线压力 |
+| 道具系统 | 锚点、攀山绳 | 从背包扣除物品，生成零体力消耗抓点 |
+| 背包系统 | 类三角洲网格、重量、堆叠、取舍 | 小背包 4x4 随时打开；大背包 6x6 休息时打开 |
+| 资源采集 | 普通资源和低概率高价值资源 | 高价值资源非必需、不可刷新 |
+| 烹饪补给 | 长休息点处理食物、燃料和恢复 | 不做深生存，只做关键取舍 |
+| 休息系统 | 短休息、长休息 | 短休恢复体力，长休开放整理和恢复 |
+| UI 系统 | 状态条、背包、提示、道具数量 | 可读性优先 |
 
 ---
 
-## 6. UI and Interaction
-| UI item | Purpose |
-|---------|---------|
-| Stamina bar | Show climb pressure |
-| Status icons | Hunger, cold, sanity, health |
-| Tool state | Anchor / rope / empty |
-| Interaction prompt | Rest, supply, camp, or special point entry |
-| Key prompts | Basic tutorial readability |
+## 4. 攀爬与体力规则
+
+| 项目 | 默认值 | 说明 |
+|---|---:|---|
+| 基础攀爬体力 | 100 | 短期资源，不是长期属性 |
+| 成功抓取 | -2 | 普通抓点和普通岩面抓取消耗 |
+| 保持抓取 | -1/秒/手 | 两只手同时保持时消耗叠加 |
+| 锚点抓取/保持 | 0 | 道具生成安全抓点 |
+| 绳索抓取/保持 | 0 | 道具生成安全抓点 |
+| 蹬腿 | 建议 -4/次 | Q/E 给左右方向和向上的动量 |
+
+重量修正规则：
+
+| 重量等级 | 条件建议 | 攀爬影响 |
+|---|---|---|
+| 轻装 | 0% 到 40% 负重 | 无惩罚 |
+| 中载 | 40% 到 70% 负重 | 保持消耗 +10% |
+| 重载 | 70% 到 100% 负重 | 保持消耗 +25%，蹬腿效率 -10% |
+| 超载 | 超过 100% 负重 | 保持消耗 +40%，蹬腿效率 -20%，可考虑禁止部分跳跃路线 |
+
+实现建议：
+
+- `PlayerVitals` 保持 `Stamina` 字段，命名上解释为“攀爬体力/行动体力”。
+- 背包系统暴露 `HoldDrainMultiplier` 和 `KickForceMultiplier`。
+- `PlayerClimbController` 在扣保持体力和蹬腿加力时读取倍率。
+- 不要让长期状态每秒大量扣体力，否则会抢走攀爬系统本身的手感重点。
 
 ---
 
-## 7. Technical Constraints
-- Use one fixed camera-facing climbing plane and a simple body-rig approach that can be tuned quickly.
-- Do not build a deep survival system. Only keep states that affect movement decisions and rest timing.
-- Keep the route linearly readable with a few branch points for resources or recovery.
-- Anchor and rope should be implemented as state switches, not separate complex subsystems.
-- All prompts, tool changes, and rest states must be deterministic and easy to debug.
+## 5. 道具系统
+
+### 5.1 锚点
+
+- W 进入道具装备状态，滚轮切到锚点。
+- 装备锚点后，任意手臂的下一次有效抓取位置留下锚点。
+- 抓取锚点、保持锚点均不消耗体力。
+- 使用成功后从背包消耗 1 个锚点物品。
+- Jam 成品版建议同屏只允许 1 到 2 个主动锚点，避免路线完全失去压力。
+
+### 5.2 攀山绳
+
+- W 进入道具装备状态，滚轮切到攀山绳。
+- 当前没有抓取的手，或第一只松开的手，进入抛绳动作。
+- 系统显示较大范围内的绳子落点预览。
+- 确认后绳索发射到落点并下落，生成一串可抓取绳点。
+- 抓取绳索、保持绳索均不消耗体力。
+- 使用成功后从背包消耗 1 个攀山绳物品。
 
 ---
 
-## 8. Audio Implementation Notes
-- Grab, hold, slip, kick, swing, rope fire, rope settle, anchor place, short rest, long rest, wind, breathing, fire, fail sting, summit sting.
-- Audio should be tied to state changes, not only decorative ambience.
-- If time is short, prioritize grab, slip, breathing, wind, and tool confirm sounds first.
+## 6. 休息点规则
+
+| 类型 | 功能 | 限制 |
+|---|---|---|
+| 短休息点 | 恢复攀爬体力，少量缓解低温暖/理智压力 | 不保存，不烹饪，不开放完整背包整理 |
+| 长休息点 | 恢复主要状态，保存，整理背包，烹饪和补给 | 必须是地图上明确安全位置 |
+| 短休限定点 | 只能短休 | 用于危险路段前后的节奏缓冲 |
+
+建议实现：
+
+- 按 F 后不直接恢复，而是进入休息界面。
+- 摄像头移动到对应休息点，人物隐藏。
+- 风声和外部环境声降低，形成类似待在帐篷内的感觉。
+- 屏幕右侧显示三个选项：背包整理、烹饪、休息。
+- 点击背包整理：短休息点只打开小背包；长休息点打开小背包和大背包。
+- 点击烹饪：只有长休息点可用，打开烹饪菜单。
+- 点击休息：根据短休/长休恢复对应属性，然后结束休息并回到攀爬。
+- `RestPointType.ShortRest` 结算时调用 `PlayerVitals.RecoverForShortRest()`。
+- `RestPointType.LongRest` 结算时调用 `PlayerVitals.RestoreAllForLongRest()`，并更新检查点。
+
+详细程序策划见：`Docs/Rise-休息系统程序策划.md`。
 
 ---
 
-## 9. Asset Delivery Rules
-The asset list is intended for direct production handoff. Every row in the CSV should map to one deliverable item or one clearly named variant.
+## 7. 背包系统接入原则
 
-- Map pieces should be modular and snap-friendly.
-- Icons should be readable at HUD size.
-- Backgrounds should support height and weather readability, not compete with the player silhouette.
-- Audio entries should be one-shot or loop assets, clearly named by state and trigger.
+背包系统不是独立小游戏，而是路线选择系统。
+
+- 玩家必须在有限格子和重量限制中选择：食物、燃料、医疗、锚点、绳索、采集品。
+- 背包越重，攀爬越吃力。
+- 小背包 4x4，随时可以打开，用于快速使用和临时取舍。
+- 大背包 6x6，只能在休息时打开，用于完整整理、烹饪和长线补给规划。
+- 背包操作以《三角洲行动》为参考：左键拖拽，拖拽中 R 旋转 90 度，F 快速放入/放出，右键打开“使用 / 丢弃 / 详情”子菜单。
+- 详情会显示该道具作用 3 秒。
+- 资源点打开后先显示物品轮廓，系统自动搜索，每 1 秒揭示 1 个物品。
+- 玩家只能操作已经搜索完成的资源点物品。
+- 短休息不允许完整重排大背包，避免频繁打断攀爬节奏。
+- 长休息允许完整整理，形成“下一段路线规划”的节奏节点。
+- 资源采集点不应强迫玩家捡所有物品，应允许放弃、替换和快速转移。
+
+详细程序策划见：`Docs/Rise-背包系统程序策划.md`。
+
+---
+
+## 8. 地图与资源约束
+
+- 地图高度建议约 120 到 150 Unity 单位。
+- 主路线宽度建议 18 到 26 Unity 单位，关键分支可以扩到 32 Unity 单位。
+- 熟练玩家目标通关时间约 10 分钟。
+- 设置 3 到 4 个明显门槛：基础抓取门槛、摆荡门槛、道具路线门槛、终盘体力压力门槛。
+- 资源点放在主线稍偏的位置，取资源意味着多一次风险或额外体力消耗。
+- 高价值资源低概率出现，每个区域最多 1 到 2 个，不刷新，不作为通关必需条件。
+
+---
+
+## 9. 美术与音效技术约束
+
+- 地图石头预制体要支持快速拼接，优先矩形边界、斜边、凸起、凹槽、平台、尖角、窄缝等形状。
+- 不需要冰相关内容。
+- 锚点、绳索、资源点、休息点必须在远距离可识别。
+- UI 图标需要覆盖体力、健康、饥饿、温暖、理智、锚点、绳索、食物、燃料、医疗、稀有资源。
+- 音效优先级：抓取成功、滑落、蹬腿、锚点放置、绳索发射、低体力喘息、风声、短休、长休、终点。
+
+---
+
+## 10. 验收标准
+
+- 新玩家 30 秒内理解鼠标双手、Q/E 蹬腿、W 道具装备。
+- 玩家能清楚感知“轻装”和“重载”攀爬手感差异。
+- 锚点和绳索能显著改变路线安全性，但不能完全跳过主要门槛。
+- 短休息和长休息的功能边界清晰。
+- 背包系统能制造真实取舍：多带工具、食物或医疗都会牺牲空间和重量。
+- 高价值资源出现时是奖励，不出现时主线仍可正常通关。

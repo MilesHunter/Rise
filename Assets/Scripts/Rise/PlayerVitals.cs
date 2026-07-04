@@ -9,7 +9,7 @@ namespace Rise
 
         [SerializeField] private float stamina = MaxValue;
         [SerializeField] private float hunger = MaxValue;
-        [SerializeField] private float cold = 15f;
+        [SerializeField] private float warmth = MaxValue;
         [SerializeField] private float sanity = MaxValue;
         [SerializeField] private float health = MaxValue;
 
@@ -18,7 +18,7 @@ namespace Rise
         public float Stamina => stamina;
         public float MaxStamina => MaxValue;
         public float Hunger => hunger;
-        public float Cold => cold;
+        public float Warmth => warmth;
         public float Sanity => sanity;
         public float Health => health;
         public bool LowStamina => stamina <= 20f;
@@ -45,7 +45,7 @@ namespace Rise
         {
             stamina = MaxValue;
             hunger = Mathf.Min(MaxValue, hunger + 30f);
-            cold = Mathf.Max(0f, cold - 10f);
+            warmth = Mathf.Min(MaxValue, warmth + 10f);
             sanity = Mathf.Min(MaxValue, sanity + 20f);
             health = Mathf.Min(MaxValue, health + 15f);
             Changed?.Invoke();
@@ -54,8 +54,17 @@ namespace Rise
         public void RecoverForShortRest()
         {
             stamina = Mathf.Min(MaxValue, stamina + 35f);
-            cold = Mathf.Max(0f, cold - 1.5f);
+            warmth = Mathf.Min(MaxValue, warmth + 2f);
             sanity = Mathf.Min(MaxValue, sanity + 4f);
+            Changed?.Invoke();
+        }
+
+        public void RestoreByRecipe(float healthAmount, float hungerAmount, float warmthAmount, float sanityAmount)
+        {
+            health = Mathf.Min(MaxValue, health + Mathf.Max(0f, healthAmount));
+            hunger = Mathf.Min(MaxValue, hunger + Mathf.Max(0f, hungerAmount));
+            warmth = Mathf.Min(MaxValue, warmth + Mathf.Max(0f, warmthAmount));
+            sanity = Mathf.Min(MaxValue, sanity + Mathf.Max(0f, sanityAmount));
             Changed?.Invoke();
         }
 

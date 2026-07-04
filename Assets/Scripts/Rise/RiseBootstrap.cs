@@ -109,6 +109,9 @@ namespace Rise
             body.interpolation = RigidbodyInterpolation.Interpolate;
 
             playerObject.AddComponent<PlayerVitals>();
+            playerObject.AddComponent<PlayerInventory>();
+            playerObject.AddComponent<RestSessionController>();
+            playerObject.AddComponent<CookingSystem>();
             playerObject.AddComponent<ToolController>();
             PlayerClimbController controller = playerObject.AddComponent<PlayerClimbController>();
             controller.Initialize(sceneCamera, new Vector3(-4.5f, 0.2f, 0f), parent);
@@ -127,6 +130,10 @@ namespace Rise
             hud.transform.SetParent(parent, false);
             GameHUDPresenter presenter = hud.AddComponent<GameHUDPresenter>();
             presenter.Initialize(player);
+
+            GameObject inventoryUi = new GameObject("InventoryAndRestUI");
+            inventoryUi.transform.SetParent(parent, false);
+            inventoryUi.AddComponent<InventoryUI>().Initialize(player);
         }
 
         private static void ConfigureCamera(Camera sceneCamera, Transform player)

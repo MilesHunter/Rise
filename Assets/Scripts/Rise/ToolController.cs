@@ -10,6 +10,7 @@ namespace Rise
         [SerializeField] private int ropeSegments = 4;
 
         private PlayerClimbController controller;
+        private PlayerInventory inventory;
         private ClimbHold activeAnchor;
         private GameObject activeRopeRoot;
         private GameObject generatedRoot;
@@ -20,6 +21,7 @@ namespace Rise
         public void Initialize(PlayerClimbController owner, Transform root)
         {
             controller = owner;
+            inventory = owner != null ? owner.Inventory : GetComponent<PlayerInventory>();
             if (generatedRoot == null)
             {
                 generatedRoot = new GameObject("GeneratedTools");
@@ -88,7 +90,7 @@ namespace Rise
                 return false;
             }
 
-            if (!controller.Vitals.TrySpendStamina(2f))
+            if (inventory == null || inventory.CountSmall(PlayerInventory.AnchorItemId) <= 0)
             {
                 return false;
             }
@@ -110,6 +112,7 @@ namespace Rise
 
             activeAnchor = anchorObject.AddComponent<ClimbHold>();
             activeAnchor.Configure(ClimbHoldType.Anchor, true, true, 0f, 0f, 0f, 0f, "Anchor");
+            inventory.TryConsumeSmall(PlayerInventory.AnchorItemId, 1);
             return true;
         }
 
@@ -127,7 +130,7 @@ namespace Rise
             }
             target.z = 0f;
 
-            if (Vector3.Distance(source, target) > ropeRange || !controller.Vitals.TrySpendStamina(4f))
+            if (Vector3.Distance(source, target) > ropeRange || inventory == null || inventory.CountSmall(PlayerInventory.RopeItemId) <= 0)
             {
                 return false;
             }
@@ -159,6 +162,7 @@ namespace Rise
                 hold.Configure(ClimbHoldType.Rope, true, true, 0f, 0f, 0f, 0f, "Rope");
             }
 
+            inventory.TryConsumeSmall(PlayerInventory.RopeItemId, 1);
             return true;
         }
     }

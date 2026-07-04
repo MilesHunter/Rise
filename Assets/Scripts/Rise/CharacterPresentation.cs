@@ -59,6 +59,7 @@ namespace Rise
 
             transform.position = controller.transform.position + new Vector3(0f, -0.95f, 0f);
             transform.rotation = Quaternion.identity;
+            SetRenderersVisible(!controller.InputFrozen);
 
             float horizontalVelocity = controller.BodyVelocity.x;
             float tilt = Mathf.Clamp(horizontalVelocity * -7f, -18f, 18f);
@@ -322,6 +323,15 @@ namespace Rise
             if (controller != null && !built)
             {
                 BuildVisual();
+            }
+        }
+
+        private void SetRenderersVisible(bool visible)
+        {
+            Renderer[] renderers = GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                renderers[i].enabled = visible;
             }
         }
     }

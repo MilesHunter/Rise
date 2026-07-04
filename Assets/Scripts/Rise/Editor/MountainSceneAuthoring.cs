@@ -190,6 +190,9 @@ namespace Rise.Editor
             body.interpolation = RigidbodyInterpolation.Interpolate;
 
             playerObject.AddComponent<PlayerVitals>();
+            playerObject.AddComponent<PlayerInventory>();
+            playerObject.AddComponent<RestSessionController>();
+            playerObject.AddComponent<CookingSystem>();
             playerObject.AddComponent<ToolController>();
             return playerObject.AddComponent<PlayerClimbController>();
         }
@@ -199,6 +202,10 @@ namespace Rise.Editor
             GameObject hud = new GameObject("HUD");
             hud.transform.SetParent(parent, false);
             hud.AddComponent<GameHUDPresenter>();
+
+            GameObject inventoryUi = new GameObject("InventoryAndRestUI");
+            inventoryUi.transform.SetParent(parent, false);
+            inventoryUi.AddComponent<InventoryUI>();
         }
 
         private static void BuildPresentation(Transform parent)
