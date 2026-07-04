@@ -25,6 +25,17 @@ namespace Rise
         [SerializeField] private float restDuration = 1.15f;
         [SerializeField] private float surfaceGrabTolerance = 0.9f;
         [SerializeField] private float handReachLimit = 2.35f;
+        [SerializeField] private Vector3 leftFreeHandRestOffset = new Vector3(-0.75f, 0.25f, 0f);
+        [SerializeField] private Vector3 rightFreeHandRestOffset = new Vector3(0.75f, 0.25f, 0f);
+        [SerializeField] private float freeHandReturnSpeed = 8f;
+        [SerializeField] private Vector3 leftFootSupportOffset = new Vector3(-0.22f, -0.95f, 0f);
+        [SerializeField] private Vector3 rightFootSupportOffset = new Vector3(0.22f, -0.95f, 0f);
+        [SerializeField] private float footSupportHorizontalReach = 0.55f;
+        [SerializeField] private float footSupportVerticalReach = 0.75f;
+        [SerializeField] private float footSupportHeight = 0.06f;
+        [SerializeField] private float footSupportSpringStrength = 75f;
+        [SerializeField] private float footSupportDamping = 11f;
+        [SerializeField] private float maxFootSupportAcceleration = 28f;
 
         private Rigidbody body;
         private Camera mainCamera;
@@ -121,6 +132,7 @@ namespace Rise
             ConstrainToPlane();
             ApplyHoldForce(LeftHand);
             ApplyHoldForce(RightHand);
+            ApplyFootSupport();
             DrainStaminaWhileHolding(LeftHand);
             DrainStaminaWhileHolding(RightHand);
 
@@ -505,6 +517,68 @@ namespace Rise
             UpdateSlip(hand);
         }
 
+        private void ApplyFootSupport()
+        {
+            if (IsRestLocked || hasWon || body.isKinematic)
+            {
+                return;
+            }
+
+            bool leftSupported = TryApplyFootSupport(leftFootSupportOffset);
+            bool rightSupported = TryApplyFootSupport(rightFootSupportOffset);
+            if (!leftSupported && !rightSupported)
+            {
+                return;
+            }
+        }
+
+        private bool TryApplyFootSupport(Vector3 localFootOffset)
+        {
+            Vector3 footWorld = transform.position + localFootOffset;
+            footWorld.z = movePlaneZ;
+
+            if (!TryFindBestFootSupport(footWorld, out Vector3 supportPoint))
+            {
+                return false;
+            }
+
+            float desiredFootY = supportPoint.y + footSupportHeight;
+            float compression = desiredFootY - footWorld.y;
+            if (compression <= 0f)
+            {
+                return true;
+            }
+
+            float downwardVelocity = Mathf.Max(0f, -body.GetPointVelocity(footWorld).y);
+            float upwardAcceleration = compression * footSupportSpringStrength + downwardVelocity * footSupportDamping;
+            upwardAcceleration = Mathf.Min(upwardAcceleration, maxFootSupportAcceleration);
+            body.AddForce(Vector3.up * upwardAcceleration, ForceMode.Acceleration);
+            return true;
+        }
+
+        private bool TryFindBestFootSupport(Vector3 footWorld, out Vector3 bestPoint)
+        {
+            bestPoint = Vector3.zero;
+            float bestDistance = float.MaxValue;
+
+            foreach (ClimbSurface surface in ClimbSurface.ActiveSurfaces)
+            {
+                if (surface == null || !surface.TryGetSupportPoint(footWorld, footSupportHorizontalReach, footSupportVerticalReach, out Vector3 supportPoint))
+                {
+                    continue;
+                }
+
+                float distance = Vector2.Distance(new Vector2(footWorld.x, footWorld.y), new Vector2(supportPoint.x, supportPoint.y));
+                if (distance < bestDistance)
+                {
+                    bestDistance = distance;
+                    bestPoint = supportPoint;
+                }
+            }
+
+            return bestDistance < float.MaxValue;
+        }
+
         private void ConstrainToPlane()
         {
             Vector3 position = body.position;
@@ -567,7 +641,7 @@ namespace Rise
             }
             else
             {
-                LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, pointerMode ? CursorWorld : LeftHand.WorldTarget);
+                LeftHand.WorldTarget = UpdateFreeHandTarget(LeftHand, pointerMode);
             }
 
             if (RightHand.HasHold)
@@ -576,8 +650,21 @@ namespace Rise
             }
             else
             {
-                RightHand.WorldTarget = GetReachLimitedTarget(RightHand, pointerMode ? CursorWorld : RightHand.WorldTarget);
+                RightHand.WorldTarget = UpdateFreeHandTarget(RightHand, pointerMode);
             }
+        }
+
+        private Vector3 UpdateFreeHandTarget(HandState hand, bool pointerMode)
+        {
+            if (pointerMode)
+            {
+                return GetReachLimitedTarget(hand, CursorWorld);
+            }
+
+            Vector3 target = hand.IsPressed
+                ? hand.WorldTarget
+                : Vector3.MoveTowards(hand.WorldTarget, GetFreeHandRestTarget(hand), freeHandReturnSpeed * Time.deltaTime);
+            return GetReachLimitedTarget(hand, target);
         }
 
         private bool ApplyMouseDeltaToHand(HandState hand, Vector3 worldDelta)
@@ -790,11 +877,18 @@ namespace Rise
 
         private void ResetFreeHandTargets()
         {
-            LeftHand.WorldTarget = transform.position + LeftHand.LocalAnchorOffset;
-            RightHand.WorldTarget = transform.position + RightHand.LocalAnchorOffset;
+            LeftHand.WorldTarget = GetFreeHandRestTarget(LeftHand);
+            RightHand.WorldTarget = GetFreeHandRestTarget(RightHand);
 
             LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, LeftHand.WorldTarget);
             RightHand.WorldTarget = GetReachLimitedTarget(RightHand, RightHand.WorldTarget);
+        }
+
+        private Vector3 GetFreeHandRestTarget(HandState hand)
+        {
+            Vector3 target = transform.position + (hand.IsLeft ? leftFreeHandRestOffset : rightFreeHandRestOffset);
+            target.z = movePlaneZ;
+            return target;
         }
 
         private void EnsureInitialized(Transform generatedRoot)
@@ -850,19 +944,6 @@ namespace Rise
         public Vector3 GetHandAnchorWorld(HandState hand)
         {
             return transform.position + hand.LocalAnchorOffset;
-        }
-
-        public void SetFreeHandTargetsFromVisuals(Vector3 leftHandWorld, Vector3 rightHandWorld)
-        {
-            if (!LeftHand.HasHold)
-            {
-                LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, leftHandWorld);
-            }
-
-            if (!RightHand.HasHold)
-            {
-                RightHand.WorldTarget = GetReachLimitedTarget(RightHand, rightHandWorld);
-            }
         }
 
         public void BeginRestFreeze(RestPoint restPoint)

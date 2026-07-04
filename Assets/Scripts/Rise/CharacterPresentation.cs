@@ -32,7 +32,6 @@ namespace Rise
         private Quaternion leftUpperLegInitialLocalRotation;
         private Quaternion rightUpperLegInitialLocalRotation;
         private bool initialized;
-        private bool syncedInitialHandTargets;
 
         public void Initialize(PlayerClimbController owner)
         {
@@ -63,8 +62,6 @@ namespace Rise
 
             Transform followRoot = visualRoot != null ? visualRoot : transform;
             followRoot.position = controller.transform.position + rootFollowOffset;
-
-            SyncInitialHandTargetsFromBones();
 
             float horizontalVelocity = controller.BodyVelocity.x;
             float tilt = Mathf.Clamp(horizontalVelocity * -7f, -18f, 18f);
@@ -136,17 +133,6 @@ namespace Rise
             Vector3 currentAxis = bone.TransformDirection(Vector3.right);
             Quaternion delta = Quaternion.FromToRotation(currentAxis, direction.normalized);
             bone.rotation = delta * bone.rotation;
-        }
-
-        private void SyncInitialHandTargetsFromBones()
-        {
-            if (syncedInitialHandTargets || leftHandBone == null || rightHandBone == null)
-            {
-                return;
-            }
-
-            controller.SetFreeHandTargetsFromVisuals(leftHandBone.position - leftHandTargetOffset, rightHandBone.position - rightHandTargetOffset);
-            syncedInitialHandTargets = true;
         }
 
         private static void AimHandBone(Transform handBone, Vector3 target, Vector3 eulerOffset)
