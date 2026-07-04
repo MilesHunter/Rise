@@ -115,11 +115,6 @@ namespace Rise
             playerObject.AddComponent<PlayerAudioBridge>();
             controller.Initialize(sceneCamera, new Vector3(-4.5f, 0.2f, 0f), parent);
 
-            GameObject presentationObject = new GameObject("CharacterPresentation");
-            presentationObject.transform.SetParent(parent, false);
-            CharacterPresentation presentation = presentationObject.AddComponent<CharacterPresentation>();
-            presentation.Initialize(controller);
-
             toolController.ToolPlaced += (toolKind, position) =>
             {
                 AudioService service = AudioService.Instance;

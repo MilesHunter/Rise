@@ -82,7 +82,6 @@ namespace Rise.Editor
             BuildRoute(levelRoot.transform);
             PlayerClimbController player = BuildPlayer(root.transform);
             BuildHud(root.transform);
-            BuildPresentation(root.transform);
             ConfigureCamera(player.transform);
 
             EditorSceneManager.MarkSceneDirty(scene);
@@ -113,7 +112,7 @@ namespace Rise.Editor
         {
             foreach (GameObject rootObject in scene.GetRootGameObjects())
             {
-                if (rootObject.name == RootName || rootObject.name == "HUD" || rootObject.name == "CharacterPresentation" || rootObject.name == "Player")
+                if (rootObject.name == RootName || rootObject.name == "HUD" || rootObject.name == "Player")
                 {
                     Object.DestroyImmediate(rootObject);
                 }
@@ -199,13 +198,6 @@ namespace Rise.Editor
             GameObject hud = new GameObject("HUD");
             hud.transform.SetParent(parent, false);
             hud.AddComponent<GameHUDPresenter>();
-        }
-
-        private static void BuildPresentation(Transform parent)
-        {
-            GameObject presentationObject = new GameObject("CharacterPresentation");
-            presentationObject.transform.SetParent(parent, false);
-            presentationObject.AddComponent<CharacterPresentation>();
         }
 
         private static void ConfigureCamera(Transform player)

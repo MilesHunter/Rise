@@ -100,6 +100,7 @@ namespace Rise
             UpdatePrompt();
             DecayKickVisuals();
             UpdateBreathingState();
+            Tools.UpdateRuntime();
         }
 
         private void FixedUpdate()
@@ -152,9 +153,10 @@ namespace Rise
                 mainCamera = Camera.main;
             }
 
-            if (!cursorLocked)
+            bool shouldLockCursor = Tools == null || !Tools.IsPointerToolMode;
+            if (cursorLocked != shouldLockCursor)
             {
-                SetCursorLock(true);
+                SetCursorLock(shouldLockCursor);
             }
 
             Vector2 mousePosition = Mouse.current != null ? Mouse.current.position.ReadValue() : Vector2.zero;
@@ -190,12 +192,26 @@ namespace Rise
                 return;
             }
 
-            HandleHand(LeftHand, Mouse.current.leftButton.wasPressedThisFrame, Mouse.current.leftButton.wasReleasedThisFrame);
+            if (Tools == null || Tools.ActiveRopeHand != LeftHand)
+            {
+                HandleHand(LeftHand, Mouse.current.leftButton.wasPressedThisFrame, Mouse.current.leftButton.wasReleasedThisFrame);
+            }
             HandleHand(RightHand, Mouse.current.rightButton.wasPressedThisFrame, Mouse.current.rightButton.wasReleasedThisFrame);
         }
 
         private void HandleHand(HandState hand, bool pressed, bool released)
         {
+            if (Tools != null && Tools.IsHandReservedForRope(hand) && !(Tools.IsPointerToolMode && hand == RightHand))
+            {
+                return;
+            }
+
+            if (Tools != null && Tools.IsPointerToolMode && hand == RightHand)
+            {
+                HandleRopeHand(hand, pressed, released);
+                return;
+            }
+
             hand.WorldTarget = hand.HasHold ? hand.CurrentHold.Position : GetReachLimitedTarget(hand, hand.WorldTarget);
 
             if (pressed)
@@ -219,6 +235,50 @@ namespace Rise
             {
                 hand.IsPressed = false;
                 ReleaseHand(hand);
+            }
+        }
+
+        private void HandleRopeHand(HandState hand, bool pressed, bool released)
+        {
+            hand.WorldTarget = GetReachLimitedTarget(hand, CursorWorld);
+
+            if (pressed)
+            {
+                hand.IsPressed = true;
+                ClimbHold hoveredHold = FindHoveredHold(CursorWorld);
+                ClimbSurface hoveredSurface = hoveredHold == null ? FindHoveredSurface(CursorWorld) : null;
+
+                if (Tools.TryFireRope(hand, CursorWorld, hoveredHold, hoveredSurface))
+                {
+                    HandState ropeHand = Tools.ActiveRopeHand;
+                    ClimbHold ropeHold = ropeHand != null ? Tools.GetRopeHold(ropeHand) : null;
+                    if (ropeHold != null)
+                    {
+                        ReleaseHand(ropeHand);
+                        ropeHand.CurrentHold = ropeHold;
+                        ropeHand.OwnsRuntimeHold = false;
+                        ropeHand.State = HandGrabState.AssistedHold;
+                        ropeHand.WorldTarget = ropeHold.Position;
+                        ropeHand.HoldDrainTimer = 0f;
+                        ropeHand.SlipCheckTimer = 0f;
+                        GrabSuccess?.Invoke(ropeHand, ropeHold, FindSurfaceForPoint(ropeHold.Position), ropeHold.Position);
+                    }
+                }
+                else
+                {
+                    GrabFailed?.Invoke(hand, hand.WorldTarget);
+                }
+            }
+
+            if (released)
+            {
+                hand.IsPressed = false;
+                HandState ropeHand = Tools.ActiveRopeHand;
+                if (ropeHand != null && Tools.HasActiveRope(ropeHand))
+                {
+                    Tools.ReleaseRope(ropeHand);
+                    ReleaseHand(ropeHand);
+                }
             }
         }
 
@@ -373,7 +433,7 @@ namespace Rise
             }
 
             CurrentPrompt = Tools.ToolMode
-                ? $"Tool mode: {Tools.SelectedTool}. Click a hold or wall point."
+                ? $"Tool mode: {Tools.SelectedTool}. {Tools.GetToolPromptSuffix()}"
                 : BuildGripPrompt();
         }
 
@@ -444,7 +504,8 @@ namespace Rise
         private void UpdateMouseDrivenTargets()
         {
             Vector3 worldDelta = Vector3.zero;
-            if (Mouse.current != null)
+            bool pointerMode = Tools != null && Tools.IsPointerToolMode;
+            if (Mouse.current != null && !pointerMode)
             {
                 Vector2 mouseDelta = Mouse.current.delta.ReadValue();
                 worldDelta = new Vector3(mouseDelta.x, mouseDelta.y, 0f) * mouseDeltaWorldScale;
@@ -485,7 +546,7 @@ namespace Rise
             }
             else
             {
-                LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, LeftHand.WorldTarget);
+                LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, pointerMode ? CursorWorld : LeftHand.WorldTarget);
             }
 
             if (RightHand.HasHold)
@@ -494,7 +555,7 @@ namespace Rise
             }
             else
             {
-                RightHand.WorldTarget = GetReachLimitedTarget(RightHand, RightHand.WorldTarget);
+                RightHand.WorldTarget = GetReachLimitedTarget(RightHand, pointerMode ? CursorWorld : RightHand.WorldTarget);
             }
         }
 
@@ -733,6 +794,11 @@ namespace Rise
 
             activeBreathingCue = nextCue;
             BreathingStateChanged?.Invoke(nextCue);
+        }
+
+        public Vector3 GetHandAnchorWorld(HandState hand)
+        {
+            return transform.position + hand.LocalAnchorOffset;
         }
 
         private ClimbSurface FindSurfaceForPoint(Vector3 point)
