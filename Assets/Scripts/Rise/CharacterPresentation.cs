@@ -32,11 +32,22 @@ namespace Rise
         private Quaternion rightUpperLegInitialLocalRotation;
         private Transform leftHandBone;
         private Transform rightHandBone;
+        private bool built;
 
         public void Initialize(PlayerClimbController owner)
         {
             controller = owner;
-            BuildVisual();
+            EnsureBuilt();
+        }
+
+        private void Start()
+        {
+            if (controller == null)
+            {
+                controller = Object.FindAnyObjectByType<PlayerClimbController>();
+            }
+
+            EnsureBuilt();
         }
 
         private void LateUpdate()
@@ -90,6 +101,11 @@ namespace Rise
 
         private void BuildVisual()
         {
+            if (built)
+            {
+                return;
+            }
+
             GameObject visualPrefab = null;
 #if UNITY_EDITOR
             visualPrefab = AssetDatabase.LoadAssetAtPath<GameObject>(CharacterAssetPath);
@@ -117,6 +133,7 @@ namespace Rise
             visualRoot = instance.transform;
             CacheHumanoidBones(instance);
             BuildHandMarkers();
+            built = true;
         }
 
         private void NormalizeVisualScale(GameObject instance)
@@ -298,6 +315,14 @@ namespace Rise
             Vector3 start = shoulder != null ? shoulder.position : target;
             line.SetPosition(0, start);
             line.SetPosition(1, target);
+        }
+
+        private void EnsureBuilt()
+        {
+            if (controller != null && !built)
+            {
+                BuildVisual();
+            }
         }
     }
 }

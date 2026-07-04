@@ -12,22 +12,27 @@ namespace Rise
     public sealed class PlayerClimbController : MonoBehaviour
     {
         [SerializeField] private float holdReach = 2.75f;
-        [SerializeField] private float cursorHoldSelectRadius = 0.85f;
         [SerializeField] private float holdSpringStrength = 55f;
         [SerializeField] private float holdSpringDamping = 7f;
+        [SerializeField] private float mouseDeltaWorldScale = 0.015f;
+        [SerializeField] private float bodyDriveReturnSpeed = 4f;
+        [SerializeField] private float maxBodyDriveOffset = 1.8f;
         [SerializeField] private float movePlaneZ = 0f;
         [SerializeField] private float kickForce = 7f;
         [SerializeField] private float fallY = -4f;
         [SerializeField] private float restDuration = 1.15f;
         [SerializeField] private float surfaceGrabTolerance = 0.9f;
+        [SerializeField] private float handReachLimit = 2.35f;
 
         private Rigidbody body;
         private Camera mainCamera;
         private RestPoint currentRestPoint;
         private GoalPoint currentGoalPoint;
         private Vector3 checkpoint;
+        private Vector3 bodyDriveOffset;
         private Coroutine restRoutine;
         private bool hasWon;
+        private bool initialized;
 
         public HandState LeftHand { get; } = new HandState { DisplayName = "Left", IsLeft = true, LocalAnchorOffset = new Vector3(-0.45f, 0.55f, 0f) };
         public HandState RightHand { get; } = new HandState { DisplayName = "Right", IsLeft = false, LocalAnchorOffset = new Vector3(0.45f, 0.55f, 0f) };
@@ -39,29 +44,27 @@ namespace Rise
         public bool HasWon => hasWon;
         public float LeftKickVisual { get; private set; }
         public float RightKickVisual { get; private set; }
+        public float HandReachLimit => handReachLimit;
 
         public void Initialize(Camera sceneCamera, Vector3 spawnPoint, Transform generatedRoot)
         {
-            body = GetComponent<Rigidbody>();
-            mainCamera = sceneCamera;
-            Vitals = GetComponent<PlayerVitals>();
-            Tools = GetComponent<ToolController>();
-            Tools.Initialize(this, generatedRoot);
-            checkpoint = spawnPoint;
             transform.position = spawnPoint;
+            mainCamera = sceneCamera;
+            EnsureInitialized(generatedRoot);
+            checkpoint = spawnPoint;
+            initialized = true;
         }
 
         private void Awake()
         {
-            body = GetComponent<Rigidbody>();
-            Vitals = GetComponent<PlayerVitals>();
-            Tools = GetComponent<ToolController>();
+            EnsureInitialized(transform.parent != null ? transform.parent : transform);
             body.constraints = RigidbodyConstraints.FreezeRotationX | RigidbodyConstraints.FreezeRotationZ;
         }
 
         private void Update()
         {
             UpdateCursorWorld();
+            UpdateMouseDrivenTargets();
             UpdateToolInput();
             UpdateHandInput();
             UpdateKickInput();
@@ -158,16 +161,17 @@ namespace Rise
 
         private void HandleHand(HandState hand, bool pressed, bool released)
         {
-            hand.WorldTarget = hand.HasHold ? hand.CurrentHold.Position : CursorWorld;
+            hand.WorldTarget = hand.HasHold ? hand.CurrentHold.Position : GetReachLimitedTarget(hand, hand.WorldTarget);
 
             if (pressed)
             {
                 hand.IsPressed = true;
-                ClimbHold hoveredHold = FindHoveredHold();
-                ClimbSurface hoveredSurface = hoveredHold == null ? FindHoveredSurface(CursorWorld) : null;
-                ClimbHold surfaceGrip = hoveredHold == null ? CreateSurfaceGrip(CursorWorld) : null;
+                Vector3 targetWorld = hand.WorldTarget;
+                ClimbHold hoveredHold = FindHoveredHold(targetWorld);
+                ClimbSurface hoveredSurface = hoveredHold == null ? FindHoveredSurface(targetWorld) : null;
+                ClimbHold surfaceGrip = hoveredHold == null ? CreateSurfaceGrip(targetWorld) : null;
 
-                if (Tools.TryUseTool(CursorWorld, hoveredHold, hoveredSurface))
+                if (Tools.TryUseTool(targetWorld, hoveredHold, hoveredSurface))
                 {
                     ReleaseRuntimeHoldIfNeeded(surfaceGrip);
                     return;
@@ -228,6 +232,7 @@ namespace Rise
         private void ReleaseHand(HandState hand)
         {
             hand.State = HandGrabState.Releasing;
+            Vector3 releasedTarget = hand.CurrentHold != null ? hand.CurrentHold.Position : hand.WorldTarget;
             if (hand.OwnsRuntimeHold && hand.CurrentHold != null)
             {
                 Destroy(hand.CurrentHold.gameObject);
@@ -236,7 +241,7 @@ namespace Rise
             hand.OwnsRuntimeHold = false;
             hand.HoldDrainTimer = 0f;
             hand.SlipCheckTimer = 0f;
-            hand.WorldTarget = CursorWorld;
+            hand.WorldTarget = GetReachLimitedTarget(hand, releasedTarget);
             hand.State = HandGrabState.Idle;
         }
 
@@ -331,13 +336,14 @@ namespace Rise
             {
                 if (!hand.HasHold)
                 {
-                    hand.WorldTarget = CursorWorld;
+                    hand.WorldTarget = GetReachLimitedTarget(hand, hand.WorldTarget);
                 }
                 return;
             }
 
             Vector3 anchorWorld = transform.position + hand.LocalAnchorOffset;
-            Vector3 delta = hand.CurrentHold.Position - anchorWorld;
+            Vector3 desiredAnchorWorld = GetDesiredAnchorWorld(hand);
+            Vector3 delta = desiredAnchorWorld - anchorWorld;
             Vector3 velocityAtAnchor = body.GetPointVelocity(anchorWorld);
             Vector3 force = delta * holdSpringStrength - velocityAtAnchor * holdSpringDamping;
             force.z = 0f;
@@ -378,14 +384,76 @@ namespace Rise
             position.z = movePlaneZ;
             body.position = position;
 
+            if (body.isKinematic)
+            {
+                return;
+            }
+
             Vector3 velocity = body.linearVelocity;
             velocity.z = 0f;
             body.linearVelocity = velocity;
         }
 
-        private ClimbHold FindHoveredHold()
+        private void UpdateMouseDrivenTargets()
         {
-            ClimbHold best = null;
+            Vector3 worldDelta = Vector3.zero;
+            if (Mouse.current != null)
+            {
+                Vector2 mouseDelta = Mouse.current.delta.ReadValue();
+                worldDelta = new Vector3(mouseDelta.x, mouseDelta.y, 0f) * mouseDeltaWorldScale;
+            }
+
+            bool hasAnyHold = LeftHand.HasHold || RightHand.HasHold;
+            if (worldDelta.sqrMagnitude > 0.000001f)
+            {
+                if (!LeftHand.HasHold)
+                {
+                    LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, LeftHand.WorldTarget + worldDelta);
+                }
+
+                if (!RightHand.HasHold)
+                {
+                    RightHand.WorldTarget = GetReachLimitedTarget(RightHand, RightHand.WorldTarget + worldDelta);
+                }
+
+                if (hasAnyHold)
+                {
+                    bodyDriveOffset += worldDelta;
+                    bodyDriveOffset = Vector3.ClampMagnitude(bodyDriveOffset, maxBodyDriveOffset);
+                    bodyDriveOffset.z = 0f;
+                }
+            }
+            else if (hasAnyHold)
+            {
+                bodyDriveOffset = Vector3.MoveTowards(bodyDriveOffset, Vector3.zero, bodyDriveReturnSpeed * Time.deltaTime);
+            }
+            else
+            {
+                bodyDriveOffset = Vector3.zero;
+            }
+
+            if (LeftHand.HasHold)
+            {
+                LeftHand.WorldTarget = LeftHand.CurrentHold.Position;
+            }
+            else
+            {
+                LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, LeftHand.WorldTarget);
+            }
+
+            if (RightHand.HasHold)
+            {
+                RightHand.WorldTarget = RightHand.CurrentHold.Position;
+            }
+            else
+            {
+                RightHand.WorldTarget = GetReachLimitedTarget(RightHand, RightHand.WorldTarget);
+            }
+        }
+
+        private ClimbHold FindHoveredHold(Vector3 targetWorld)
+        {
+            ClimbHold bestHold = null;
             float bestDistance = float.MaxValue;
 
             foreach (ClimbHold hold in ClimbHold.ActiveHolds)
@@ -395,20 +463,20 @@ namespace Rise
                     continue;
                 }
 
-                float distance = Vector2.Distance(new Vector2(CursorWorld.x, CursorWorld.y), new Vector2(hold.Position.x, hold.Position.y));
-                if (distance <= cursorHoldSelectRadius && distance < bestDistance)
+                float distance = Vector2.Distance(new Vector2(targetWorld.x, targetWorld.y), new Vector2(hold.Position.x, hold.Position.y));
+                if (distance <= surfaceGrabTolerance && distance < bestDistance)
                 {
-                    best = hold;
+                    bestHold = hold;
                     bestDistance = distance;
                 }
             }
 
-            return best;
+            return bestHold;
         }
 
-        private ClimbHold CreateSurfaceGrip(Vector3 cursorWorld)
+        private ClimbHold CreateSurfaceGrip(Vector3 targetWorld)
         {
-            if (!TryFindBestSurface(cursorWorld, out ClimbSurface bestSurface, out Vector3 bestPoint))
+            if (!TryFindBestSurface(targetWorld, out ClimbSurface bestSurface, out Vector3 bestPoint))
             {
                 return null;
             }
@@ -427,13 +495,13 @@ namespace Rise
             return runtimeHold;
         }
 
-        private ClimbSurface FindHoveredSurface(Vector3 cursorWorld)
+        private ClimbSurface FindHoveredSurface(Vector3 targetWorld)
         {
-            TryFindBestSurface(cursorWorld, out ClimbSurface surface, out _);
+            TryFindBestSurface(targetWorld, out ClimbSurface surface, out _);
             return surface;
         }
 
-        private bool TryFindBestSurface(Vector3 cursorWorld, out ClimbSurface bestSurface, out Vector3 bestPoint)
+        private bool TryFindBestSurface(Vector3 targetWorld, out ClimbSurface bestSurface, out Vector3 bestPoint)
         {
             bestSurface = null;
             bestPoint = Vector3.zero;
@@ -441,12 +509,12 @@ namespace Rise
 
             foreach (ClimbSurface surface in ClimbSurface.ActiveSurfaces)
             {
-                if (surface == null || !surface.TryGetGripPoint(cursorWorld, out Vector3 gripPoint))
+                if (surface == null || !surface.TryGetGripPoint(targetWorld, out Vector3 gripPoint))
                 {
                     continue;
                 }
 
-                float distance = Vector2.Distance(new Vector2(cursorWorld.x, cursorWorld.y), new Vector2(gripPoint.x, gripPoint.y));
+                float distance = Vector2.Distance(new Vector2(targetWorld.x, targetWorld.y), new Vector2(gripPoint.x, gripPoint.y));
                 if (distance <= surfaceGrabTolerance && distance < bestDistance)
                 {
                     bestSurface = surface;
@@ -488,14 +556,7 @@ namespace Rise
 
         private string BuildGripPrompt()
         {
-            ClimbHold hoveredHold = FindHoveredHold();
-            if (hoveredHold != null)
-            {
-                string slip = hoveredHold.SlipChance > 0f ? "  slippery" : string.Empty;
-                return $"{hoveredHold.GripLabel}  grab {hoveredHold.InitialGrabCost:0.#}  drain {hoveredHold.HoldDrainPerSecond:0.#}/s{slip}";
-            }
-
-            if (TryFindBestSurface(CursorWorld, out ClimbSurface surface, out _))
+            if (TryFindBestSurface(GetPromptTargetWorld(), out ClimbSurface surface, out _))
             {
                 string slip = surface.SlipChance > 0f ? "  slippery" : string.Empty;
                 return $"{surface.SurfaceLabel} surface  grab {surface.GrabCost:0.#}  drain {surface.HoldDrainPerSecond:0.#}/s{slip}";
@@ -509,7 +570,12 @@ namespace Rise
             ReleaseHand(LeftHand);
             ReleaseHand(RightHand);
             body.position = checkpoint;
-            body.linearVelocity = Vector3.zero;
+            bodyDriveOffset = Vector3.zero;
+            ResetFreeHandTargets();
+            if (!body.isKinematic)
+            {
+                body.linearVelocity = Vector3.zero;
+            }
             Vitals.ResetToCheckpoint();
         }
 
@@ -517,6 +583,79 @@ namespace Rise
         {
             LeftKickVisual = Mathf.MoveTowards(LeftKickVisual, 0f, Time.deltaTime * 4f);
             RightKickVisual = Mathf.MoveTowards(RightKickVisual, 0f, Time.deltaTime * 4f);
+        }
+
+        private Vector3 GetReachLimitedTarget(HandState hand, Vector3 desiredTarget)
+        {
+            Vector3 shoulder = transform.position + hand.LocalAnchorOffset;
+            Vector3 offset = desiredTarget - shoulder;
+            offset.z = 0f;
+
+            if (offset.sqrMagnitude <= handReachLimit * handReachLimit)
+            {
+                desiredTarget.z = 0f;
+                return desiredTarget;
+            }
+
+            Vector3 limited = shoulder + offset.normalized * handReachLimit;
+            limited.z = 0f;
+            return limited;
+        }
+
+        private Vector3 GetDesiredAnchorWorld(HandState hand)
+        {
+            Vector3 desiredAnchorWorld = hand.CurrentHold.Position + bodyDriveOffset;
+            desiredAnchorWorld.z = movePlaneZ;
+            return desiredAnchorWorld;
+        }
+
+        private Vector3 GetPromptTargetWorld()
+        {
+            if (!LeftHand.HasHold && RightHand.HasHold)
+            {
+                return LeftHand.WorldTarget;
+            }
+
+            if (!RightHand.HasHold && LeftHand.HasHold)
+            {
+                return RightHand.WorldTarget;
+            }
+
+            if (!LeftHand.HasHold && !RightHand.HasHold)
+            {
+                return (LeftHand.WorldTarget + RightHand.WorldTarget) * 0.5f;
+            }
+
+            Vector3 bodyTarget = transform.position + bodyDriveOffset;
+            bodyTarget.z = movePlaneZ;
+            return bodyTarget;
+        }
+
+        private void ResetFreeHandTargets()
+        {
+            LeftHand.WorldTarget = transform.position + LeftHand.LocalAnchorOffset;
+            RightHand.WorldTarget = transform.position + RightHand.LocalAnchorOffset;
+
+            LeftHand.WorldTarget = GetReachLimitedTarget(LeftHand, LeftHand.WorldTarget);
+            RightHand.WorldTarget = GetReachLimitedTarget(RightHand, RightHand.WorldTarget);
+        }
+
+        private void EnsureInitialized(Transform generatedRoot)
+        {
+            body = GetComponent<Rigidbody>();
+            Vitals = GetComponent<PlayerVitals>();
+            Tools = GetComponent<ToolController>();
+
+            Transform toolRoot = generatedRoot != null ? generatedRoot : (transform.parent != null ? transform.parent : transform);
+            Tools.Initialize(this, toolRoot);
+
+            if (!initialized)
+            {
+                checkpoint = transform.position;
+                bodyDriveOffset = Vector3.zero;
+                ResetFreeHandTargets();
+                initialized = true;
+            }
         }
     }
 }

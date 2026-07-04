@@ -14,12 +14,24 @@ namespace Rise
         private Text statusText;
         private Text controlsText;
         private Text summitText;
+        private bool built;
 
         public void Initialize(PlayerClimbController player)
         {
             controller = player;
             vitals = player.Vitals;
-            BuildCanvas();
+            EnsureBuilt();
+        }
+
+        private void Start()
+        {
+            if (controller == null)
+            {
+                controller = Object.FindAnyObjectByType<PlayerClimbController>();
+                vitals = controller != null ? controller.Vitals : null;
+            }
+
+            EnsureBuilt();
         }
 
         private void Update()
@@ -41,6 +53,11 @@ namespace Rise
 
         private void BuildCanvas()
         {
+            if (built)
+            {
+                return;
+            }
+
             Canvas canvas = gameObject.AddComponent<Canvas>();
             canvas.renderMode = RenderMode.ScreenSpaceOverlay;
             gameObject.AddComponent<CanvasScaler>().uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
@@ -69,6 +86,15 @@ namespace Rise
             summitText.text = "Summit reached";
             summitText.color = new Color(0.97f, 0.92f, 0.45f);
             summitText.gameObject.SetActive(false);
+            built = true;
+        }
+
+        private void EnsureBuilt()
+        {
+            if (controller != null && vitals != null && !built)
+            {
+                BuildCanvas();
+            }
         }
 
         private static Image CreatePanel(string name, Transform parent, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPosition, Vector2 sizeDelta)

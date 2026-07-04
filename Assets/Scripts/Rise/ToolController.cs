@@ -20,7 +20,11 @@ namespace Rise
         public void Initialize(PlayerClimbController owner, Transform root)
         {
             controller = owner;
-            generatedRoot = new GameObject("GeneratedTools");
+            if (generatedRoot == null)
+            {
+                generatedRoot = new GameObject("GeneratedTools");
+            }
+
             generatedRoot.transform.SetParent(root, false);
         }
 
@@ -39,7 +43,7 @@ namespace Rise
             selectedTool = scrollValue > 0f ? ToolKind.Rope : ToolKind.Anchor;
         }
 
-        public bool TryUseTool(Vector3 cursorWorld, ClimbHold hoveredHold, ClimbSurface hoveredSurface)
+        public bool TryUseTool(Vector3 targetWorld, ClimbHold hoveredHold, ClimbSurface hoveredSurface)
         {
             if (!toolMode)
             {
@@ -50,10 +54,10 @@ namespace Rise
             switch (selectedTool)
             {
                 case ToolKind.Anchor:
-                    used = TryPlaceAnchor(cursorWorld, hoveredHold, hoveredSurface);
+                    used = TryPlaceAnchor(targetWorld, hoveredHold, hoveredSurface);
                     break;
                 case ToolKind.Rope:
-                    used = TryPlaceRope(cursorWorld, hoveredHold, hoveredSurface);
+                    used = TryPlaceRope(targetWorld, hoveredHold, hoveredSurface);
                     break;
                 default:
                     used = false;
@@ -68,14 +72,14 @@ namespace Rise
             return used;
         }
 
-        private bool TryPlaceAnchor(Vector3 cursorWorld, ClimbHold hoveredHold, ClimbSurface hoveredSurface)
+        private bool TryPlaceAnchor(Vector3 targetWorld, ClimbHold hoveredHold, ClimbSurface hoveredSurface)
         {
             Vector3 anchorPosition;
             if (hoveredHold != null && hoveredHold.AllowAnchorAttach)
             {
                 anchorPosition = hoveredHold.Position;
             }
-            else if (hoveredSurface != null && hoveredSurface.AllowAnchorAttach && hoveredSurface.TryGetGripPoint(cursorWorld, out Vector3 surfacePoint))
+            else if (hoveredSurface != null && hoveredSurface.AllowAnchorAttach && hoveredSurface.TryGetGripPoint(targetWorld, out Vector3 surfacePoint))
             {
                 anchorPosition = surfacePoint;
             }
@@ -109,15 +113,15 @@ namespace Rise
             return true;
         }
 
-        private bool TryPlaceRope(Vector3 cursorWorld, ClimbHold hoveredHold, ClimbSurface hoveredSurface)
+        private bool TryPlaceRope(Vector3 targetWorld, ClimbHold hoveredHold, ClimbSurface hoveredSurface)
         {
             Vector3 source = controller.transform.position + new Vector3(0f, 1.25f, 0f);
-            Vector3 target = cursorWorld;
+            Vector3 target = targetWorld;
             if (hoveredHold != null && hoveredHold.AllowRopeAttach)
             {
                 target = hoveredHold.Position;
             }
-            else if (hoveredSurface != null && hoveredSurface.AllowRopeAttach && hoveredSurface.TryGetGripPoint(cursorWorld, out Vector3 surfacePoint))
+            else if (hoveredSurface != null && hoveredSurface.AllowRopeAttach && hoveredSurface.TryGetGripPoint(targetWorld, out Vector3 surfacePoint))
             {
                 target = surfacePoint;
             }

@@ -11,6 +11,18 @@ namespace Rise
 
         private Vector3 velocity;
 
+        private void Start()
+        {
+            if (target == null)
+            {
+                PlayerClimbController player = Object.FindAnyObjectByType<PlayerClimbController>();
+                if (player != null)
+                {
+                    target = player.transform;
+                }
+            }
+        }
+
         public void Initialize(Transform followTarget)
         {
             target = followTarget;
