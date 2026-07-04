@@ -10,6 +10,7 @@ namespace Rise
     [RequireComponent(typeof(CapsuleCollider))]
     [RequireComponent(typeof(PlayerVitals))]
     [RequireComponent(typeof(ToolController))]
+    [RequireComponent(typeof(PlayerInventory))]
     public sealed class PlayerClimbController : MonoBehaviour
     {
         [SerializeField] private float holdReach = 2.75f;
@@ -34,6 +35,7 @@ namespace Rise
         private Coroutine restRoutine;
         private bool hasWon;
         private bool initialized;
+        private bool restFrozen;
         private AudioCueId activeBreathingCue;
         private bool cursorLocked;
 
@@ -41,6 +43,7 @@ namespace Rise
         public HandState RightHand { get; } = new HandState { DisplayName = "Right", IsLeft = false, LocalAnchorOffset = new Vector3(0.45f, 0.55f, 0f) };
         public PlayerVitals Vitals { get; private set; }
         public ToolController Tools { get; private set; }
+        public PlayerInventory Inventory { get; private set; }
         public string CurrentPrompt { get; private set; }
         public Vector3 CursorWorld { get; private set; }
         public Vector3 BodyVelocity => body != null ? body.linearVelocity : Vector3.zero;
@@ -92,6 +95,13 @@ namespace Rise
         private void Update()
         {
             UpdateCursorWorld();
+            if (restFrozen)
+            {
+                UpdateBreathingState();
+                Tools.UpdateRuntime();
+                return;
+            }
+
             UpdateMouseDrivenTargets();
             UpdateToolInput();
             UpdateHandInput();
@@ -350,7 +360,7 @@ namespace Rise
 
         private void UpdateKickInput()
         {
-            if (Keyboard.current == null || restRoutine != null || hasWon)
+            if (Keyboard.current == null || IsRestLocked || hasWon)
             {
                 return;
             }
@@ -378,7 +388,7 @@ namespace Rise
 
         private void UpdateRestInput()
         {
-            if (Keyboard.current == null || currentRestPoint == null || restRoutine != null || hasWon)
+            if (Keyboard.current == null || currentRestPoint == null || IsRestLocked || hasWon)
             {
                 return;
             }
@@ -421,7 +431,7 @@ namespace Rise
                 return;
             }
 
-            if (restRoutine != null)
+            if (IsRestLocked)
             {
                 return;
             }
@@ -439,7 +449,7 @@ namespace Rise
 
         private void ApplyHoldForce(HandState hand)
         {
-            if (!hand.HasHold || restRoutine != null || hasWon)
+            if (!hand.HasHold || IsRestLocked || hasWon)
             {
                 if (!hand.HasHold)
                 {
@@ -460,7 +470,7 @@ namespace Rise
 
         private void DrainStaminaWhileHolding(HandState hand)
         {
-            if (!hand.HasHold || hand.CurrentHold.ZeroStaminaHold || restRoutine != null)
+            if (!hand.HasHold || hand.CurrentHold.ZeroStaminaHold || IsRestLocked)
             {
                 return;
             }
@@ -758,6 +768,13 @@ namespace Rise
             body = GetComponent<Rigidbody>();
             Vitals = GetComponent<PlayerVitals>();
             Tools = GetComponent<ToolController>();
+            Inventory = GetComponent<PlayerInventory>();
+            if (Inventory == null)
+            {
+                Inventory = gameObject.AddComponent<PlayerInventory>();
+            }
+
+            Inventory.EnsureInitialized();
 
             Transform toolRoot = generatedRoot != null ? generatedRoot : (transform.parent != null ? transform.parent : transform);
             Tools.Initialize(this, toolRoot);
@@ -774,7 +791,7 @@ namespace Rise
         private void UpdateBreathingState()
         {
             AudioCueId nextCue = AudioCueId.None;
-            if (restRoutine == null && !hasWon)
+            if (!IsRestLocked && !hasWon)
             {
                 bool isHoldingOrMovingHard = LeftHand.HasHold || RightHand.HasHold || body.linearVelocity.sqrMagnitude > 4f;
                 if (Vitals.LowStamina && isHoldingOrMovingHard)
@@ -799,6 +816,51 @@ namespace Rise
         public Vector3 GetHandAnchorWorld(HandState hand)
         {
             return transform.position + hand.LocalAnchorOffset;
+        }
+
+        public void BeginRestFreeze(RestPoint restPoint)
+        {
+            if (restFrozen)
+            {
+                return;
+            }
+
+            if (restRoutine != null)
+            {
+                StopCoroutine(restRoutine);
+                restRoutine = null;
+            }
+
+            currentRestPoint = restPoint;
+            ReleaseHand(LeftHand);
+            ReleaseHand(RightHand);
+            body.linearVelocity = Vector3.zero;
+            body.angularVelocity = Vector3.zero;
+            body.isKinematic = true;
+            bodyDriveOffset = Vector3.zero;
+            restFrozen = true;
+            CurrentPrompt = restPoint != null ? restPoint.PromptText : "Resting";
+            if (restPoint != null)
+            {
+                RestStarted?.Invoke(restPoint.RestType, restPoint.transform.position);
+            }
+        }
+
+        public void EndRestFreeze()
+        {
+            if (!restFrozen)
+            {
+                return;
+            }
+
+            restFrozen = false;
+            body.isKinematic = false;
+            ResetFreeHandTargets();
+        }
+
+        public void SetCheckpoint(Vector3 position)
+        {
+            checkpoint = position;
         }
 
         private ClimbSurface FindSurfaceForPoint(Vector3 point)
@@ -834,5 +896,7 @@ namespace Rise
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
+
+        private bool IsRestLocked => restRoutine != null || restFrozen;
     }
 }

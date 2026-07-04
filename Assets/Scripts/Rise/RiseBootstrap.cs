@@ -110,6 +110,7 @@ namespace Rise
             body.interpolation = RigidbodyInterpolation.Interpolate;
 
             playerObject.AddComponent<PlayerVitals>();
+            playerObject.AddComponent<PlayerInventory>();
             ToolController toolController = playerObject.AddComponent<ToolController>();
             PlayerClimbController controller = playerObject.AddComponent<PlayerClimbController>();
             playerObject.AddComponent<PlayerAudioBridge>();
