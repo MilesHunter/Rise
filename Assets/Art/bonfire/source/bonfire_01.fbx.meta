@@ -3,7 +3,12 @@ guid: a32c7a3f9cb990243908f6d124089e54
 ModelImporter:
   serializedVersion: 24501
   internalIDToNameTable: []
-  externalObjects: {}
+  externalObjects:
+  - first:
+      type: UnityEngine:Material
+      assembly: UnityEngine.CoreModule
+      name: Koster1
+    second: {fileID: 2100000, guid: 21190e529b5bd1f49b35ccac42814f5b, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0
