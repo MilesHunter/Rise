@@ -142,6 +142,7 @@ namespace Rise
             playerObject.AddComponent<ToolController>();
             PlayerClimbController controller = playerObject.AddComponent<PlayerClimbController>();
             playerObject.AddComponent<PlayerAudioBridge>();
+            playerObject.AddComponent<PlayerDebugHotkeys>();
             controller.Initialize(sceneCamera, new Vector3(-4.5f, 0.2f, 0f), parent);
 
             return controller;

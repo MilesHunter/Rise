@@ -16,7 +16,7 @@ MonoBehaviour:
   clips:
   - {fileID: 8300000, guid: a59b02d2fb43d9444bbbb214cb953bbc, type: 3}
   loop: 1
-  spatialized: 1
+  spatialized: 0
   baseVolume: 0.35
   randomVolumeRange: {x: 0.94, y: 1.04}
   randomPitchRange: {x: 0.92, y: 1.06}

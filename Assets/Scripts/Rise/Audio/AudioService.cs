@@ -210,6 +210,7 @@ namespace Rise
         private AudioSource CreatePooledSource(int index)
         {
             GameObject sourceObject = new GameObject($"AudioSource_{index}");
+            sourceObject.hideFlags = HideFlags.HideInHierarchy;
             sourceObject.transform.SetParent(transform, false);
             sourceObject.SetActive(false);
 
