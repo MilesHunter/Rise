@@ -1,3 +1,4 @@
+using DG.Tweening;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -9,11 +10,16 @@ namespace Rise
         private const string HungerIconGuid = "b82870376ff74f0469ce7cfcfb7a019f";
         private const string WarmthIconGuid = "97f38603f04dc5e44909f357bb8cd0e8";
         private const string SanityIconGuid = "4227bb643ba894342aa1e36ae9c2a59c";
+        private const float StaminaTweenDuration = 0.16f;
 
         private PlayerClimbController controller;
         private PlayerVitals vitals;
         private PlayerInventory inventory;
         private Image staminaFill;
+        private RectTransform staminaFillRect;
+        private Tween staminaFillTween;
+        private float displayedStamina01 = 1f;
+        private float targetStamina01 = -1f;
         private Text staminaText;
         private Text staminaValueText;
         private Text toolText;
@@ -69,7 +75,8 @@ namespace Rise
 
             if (staminaFill != null)
             {
-                staminaFill.fillAmount = vitals.Stamina / vitals.MaxStamina;
+                float stamina01 = Mathf.Clamp01(vitals.Stamina / vitals.MaxStamina);
+                AnimateStaminaFillAmount(stamina01);
             }
 
             string staminaValue = $"{Mathf.CeilToInt(vitals.Stamina)}/{Mathf.CeilToInt(vitals.MaxStamina)}";
@@ -147,9 +154,7 @@ namespace Rise
             staminaBackground.color = new Color(0f, 0f, 0f, 0.5f);
 
             staminaFill = CreatePanel("StaminaFill", staminaBackground.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
-            staminaFill.type = Image.Type.Filled;
-            staminaFill.fillMethod = Image.FillMethod.Horizontal;
-            staminaFill.color = new Color(0.35f, 0.88f, 0.48f, 1f);
+            ConfigureStaminaFillImage(staminaFill);
 
             staminaValueText = CreateStaminaValueText(rootPanel.transform, font, staminaBackground.rectTransform);
             staminaText = CreateText("StaminaText", rootPanel.transform, font, 14, new Vector2(14f, -31f), new Vector2(190f, 20f));
@@ -169,12 +174,23 @@ namespace Rise
             built = true;
         }
 
+        private void OnDisable()
+        {
+            if (staminaFillTween != null)
+            {
+                staminaFillTween.Kill();
+                staminaFillTween = null;
+            }
+        }
+
         private void BindSceneHud(Font font)
         {
             Transform topPanel = transform.Find("TopPanel");
             Transform staminaBackground = topPanel != null ? topPanel.Find("StaminaBg") : null;
             Transform staminaFillTransform = staminaBackground != null ? staminaBackground.Find("StaminaFill") : null;
             staminaFill = staminaFillTransform != null ? staminaFillTransform.GetComponent<Image>() : null;
+            ConfigureStaminaFillImage(staminaFill);
+            staminaFillRect = staminaFill != null ? staminaFill.rectTransform : null;
 
             staminaText = FindText(topPanel, "StaminaText");
             staminaValueText = FindText(topPanel, "StaminaValue");
@@ -376,6 +392,61 @@ namespace Rise
             float pulse = maxAlpha > 0f ? Mathf.Lerp(0.55f, 1f, Mathf.PingPong(Time.unscaledTime * pulseSpeed, 1f)) : 0f;
             baseColor.a = maxAlpha * pulse;
             image.color = baseColor;
+        }
+
+        private static void ConfigureStaminaFillImage(Image image)
+        {
+            if (image == null)
+            {
+                return;
+            }
+
+            image.type = Image.Type.Filled;
+            image.fillMethod = Image.FillMethod.Horizontal;
+            image.fillOrigin = (int)Image.OriginHorizontal.Left;
+            image.fillClockwise = true;
+            image.fillAmount = 1f;
+            image.color = GetStaminaFillColor(1f);
+            image.raycastTarget = false;
+
+            RectTransform rect = image.rectTransform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+        }
+
+        private void SetStaminaFillAmount(float stamina01)
+        {
+            staminaFill.fillAmount = stamina01;
+            staminaFill.color = GetStaminaFillColor(stamina01);
+
+            if (staminaFillRect == null)
+            {
+                staminaFillRect = staminaFill.rectTransform;
+            }
+
+            Vector2 anchorMax = staminaFillRect.anchorMax;
+            anchorMax.x = stamina01;
+            staminaFillRect.anchorMax = anchorMax;
+            staminaFillRect.offsetMax = Vector2.zero;
+            staminaFillRect.offsetMin = Vector2.zero;
+        }
+
+        private static Color GetStaminaFillColor(float stamina01)
+        {
+            Color low = new Color(0.95f, 0.16f, 0.10f, 1f);
+            Color warning = new Color(1f, 0.74f, 0.18f, 1f);
+            Color healthy = new Color(0.30f, 0.86f, 0.42f, 1f);
+
+            if (stamina01 < 0.35f)
+            {
+                return Color.Lerp(low, warning, stamina01 / 0.35f);
+            }
+
+            return Color.Lerp(warning, healthy, Mathf.InverseLerp(0.35f, 1f, stamina01));
         }
 
         private void BuildResourceIconPanel(Font font)
