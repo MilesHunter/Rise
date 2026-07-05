@@ -18384,7 +18384,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 1168398955190474728, guid: 72ff82e5611db9e45bca5b1695ddb6d3, type: 3}
       propertyPath: m_Center.y
-      value: 0.3
+      value: 0.4
       objectReference: {fileID: 0}
     - target: {fileID: 1168398955190474728, guid: 72ff82e5611db9e45bca5b1695ddb6d3, type: 3}
       propertyPath: m_Center.z
@@ -18400,7 +18400,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2665605497880732690, guid: 72ff82e5611db9e45bca5b1695ddb6d3, type: 3}
       propertyPath: showHandDebugPoints
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 2781723283177703430, guid: 72ff82e5611db9e45bca5b1695ddb6d3, type: 3}
       propertyPath: m_LocalPosition.x
