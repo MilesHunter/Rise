@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
@@ -203,7 +204,22 @@ namespace Rise
             sequence.AppendInterval(delay);
             sequence.Append(menuRoot.DOAnchorPosX(54f, 0.28f).SetEase(Ease.InCubic));
             sequence.Join(menuGroup.DOFade(0f, 0.28f).SetEase(Ease.InSine));
-            sequence.OnComplete(() => SceneManager.LoadScene(sceneName));
+            sequence.OnComplete(() => StartCoroutine(LoadSceneAsync(sceneName)));
+        }
+
+        private IEnumerator LoadSceneAsync(string sceneName)
+        {
+            AsyncOperation loadOperation = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
+            if (loadOperation == null)
+            {
+                SceneManager.LoadScene(sceneName);
+                yield break;
+            }
+
+            while (!loadOperation.isDone)
+            {
+                yield return null;
+            }
         }
 
         private void ShowStatus(string message)
