@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.SceneManagement;
@@ -22,7 +23,9 @@ namespace Rise
         private Button settingsButton;
         private Button exitButton;
         private Sequence entranceSequence;
+        private Coroutine loadRoutine;
         private bool isTransitioning;
+        private bool loadRequested;
 
         private void Awake()
         {
@@ -41,6 +44,12 @@ namespace Rise
         private void OnDestroy()
         {
             entranceSequence?.Kill();
+            if (loadRoutine != null)
+            {
+                StopCoroutine(loadRoutine);
+                loadRoutine = null;
+            }
+
             if (menuRoot != null)
             {
                 menuRoot.DOKill();
@@ -195,6 +204,7 @@ namespace Rise
             }
 
             isTransitioning = true;
+            loadRequested = false;
             SetButtonsInteractable(false);
             ShowStatus("正在进入山路");
             PlayButtonFeedback(sourceButton);
@@ -203,7 +213,40 @@ namespace Rise
             sequence.AppendInterval(delay);
             sequence.Append(menuRoot.DOAnchorPosX(54f, 0.28f).SetEase(Ease.InCubic));
             sequence.Join(menuGroup.DOFade(0f, 0.28f).SetEase(Ease.InSine));
-            sequence.OnComplete(() => SceneManager.LoadScene(sceneName));
+            sequence.OnComplete(() => LoadGameplayScene(sceneName));
+            loadRoutine = StartCoroutine(LoadGameplaySceneFallback(sceneName, delay + 0.45f));
+        }
+
+        private IEnumerator LoadGameplaySceneFallback(string sceneName, float delay)
+        {
+            yield return new WaitForSecondsRealtime(Mathf.Max(0.05f, delay));
+            LoadGameplayScene(sceneName);
+        }
+
+        private void LoadGameplayScene(string sceneName)
+        {
+            if (loadRequested)
+            {
+                return;
+            }
+
+            loadRequested = true;
+            loadRoutine = StartCoroutine(LoadGameplaySceneAsync(sceneName));
+        }
+
+        private IEnumerator LoadGameplaySceneAsync(string sceneName)
+        {
+            AsyncOperation operation = SceneManager.LoadSceneAsync(sceneName, LoadSceneMode.Single);
+            if (operation == null)
+            {
+                SceneManager.LoadScene(sceneName);
+                yield break;
+            }
+
+            while (!operation.isDone)
+            {
+                yield return null;
+            }
         }
 
         private void ShowStatus(string message)

@@ -72,6 +72,7 @@ namespace Rise
         private float climbExposureTimer;
         private float freeHandsTimer;
         private CapsuleCollider bodyCollider;
+        private bool upwardClimbCollisionBypassActive;
         private readonly List<Collider> ignoredUpwardClimbColliders = new List<Collider>();
 
         public HandState LeftHand { get; } = new HandState { DisplayName = "Left", IsLeft = true, LocalAnchorOffset = new Vector3(-0.45f, 0.55f, 0f) };
@@ -707,6 +708,9 @@ namespace Rise
                 return;
             }
 
+            bool stateChanged = active != upwardClimbCollisionBypassActive;
+            upwardClimbCollisionBypassActive = active;
+
             for (int i = ignoredUpwardClimbColliders.Count - 1; i >= 0; i--)
             {
                 Collider ignored = ignoredUpwardClimbColliders[i];
@@ -723,7 +727,7 @@ namespace Rise
                 }
             }
 
-            if (!active)
+            if (!active || !stateChanged)
             {
                 return;
             }

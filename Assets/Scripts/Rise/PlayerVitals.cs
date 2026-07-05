@@ -19,7 +19,7 @@ namespace Rise
         [SerializeField] private Vector2 passiveHungerDecayRange = new Vector2(0.4f, 0.9f);
         [SerializeField] private Vector2 passiveWarmthDecayRange = new Vector2(0.15f, 0.45f);
         [SerializeField] private Vector2 passiveSanityDecayRange = new Vector2(0.08f, 0.28f);
-        [SerializeField] private float passiveDecayMultiplier = 1.5f;
+        [SerializeField] private float passiveDecayMultiplier = 6f;
 
         public event Action Changed;
         private RestSessionController restSession;
