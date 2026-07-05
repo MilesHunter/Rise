@@ -298,7 +298,9 @@ namespace Rise
 
             Color color = hand.HasHold ? grippingHandColor : hand.IsPressed ? reachingHandColor : idleHandColor;
             float size = hand.HasHold || hand.IsPressed ? handMarkerSize : freeHandMarkerSize;
-            marker.position = handBone != null ? handBone.position : target;
+            marker.position = hand.HasHold && hand.CurrentHold != null
+                ? ToVisualPlane(hand.CurrentHold.Position)
+                : handBone != null ? handBone.position : target;
             marker.localScale = Vector3.one * size;
             markerMaterial.color = color;
         }

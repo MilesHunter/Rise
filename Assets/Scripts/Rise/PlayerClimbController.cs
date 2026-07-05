@@ -17,8 +17,6 @@ namespace Rise
         [SerializeField] private float holdSpringStrength = 55f;
         [SerializeField] private float holdSpringDamping = 7f;
         [SerializeField] private float mouseDeltaWorldScale = 0.015f;
-        [SerializeField] private float bodyDriveReturnSpeed = 4f;
-        [SerializeField] private float maxBodyDriveOffset = 1.8f;
         [SerializeField] private float movePlaneZ = 0f;
         [SerializeField] private float kickForce = 7f;
         [SerializeField] private float fallY = -4f;
@@ -620,29 +618,13 @@ namespace Rise
                 worldDelta = new Vector3(mouseDelta.x, mouseDelta.y, 0f) * mouseDeltaWorldScale;
             }
 
-            bool heldHandDriveRequested = false;
             if (worldDelta.sqrMagnitude > 0.000001f)
             {
-                heldHandDriveRequested |= ApplyMouseDeltaToHand(LeftHand, worldDelta);
-                heldHandDriveRequested |= ApplyMouseDeltaToHand(RightHand, worldDelta);
-                if (heldHandDriveRequested)
-                {
-                    bodyDriveOffset += worldDelta;
-                    bodyDriveOffset = Vector3.ClampMagnitude(bodyDriveOffset, maxBodyDriveOffset);
-                    bodyDriveOffset.z = 0f;
-                }
+                ApplyMouseDeltaToHand(LeftHand, worldDelta);
+                ApplyMouseDeltaToHand(RightHand, worldDelta);
             }
 
-            bool hasAnyHold = LeftHand.HasHold || RightHand.HasHold;
-            if (!heldHandDriveRequested && hasAnyHold)
-            {
-                bodyDriveOffset = Vector3.MoveTowards(bodyDriveOffset, Vector3.zero, bodyDriveReturnSpeed * Time.deltaTime);
-            }
-
-            if (!hasAnyHold)
-            {
-                bodyDriveOffset = Vector3.zero;
-            }
+            bodyDriveOffset = Vector3.zero;
 
             if (LeftHand.HasHold)
             {
@@ -683,7 +665,7 @@ namespace Rise
 
             if (hand.HasHold)
             {
-                return true;
+                return false;
             }
 
             hand.WorldTarget = GetReachLimitedTarget(hand, hand.WorldTarget + worldDelta);
@@ -872,7 +854,7 @@ namespace Rise
 
         private Vector3 GetDesiredAnchorWorld(HandState hand)
         {
-            Vector3 desiredAnchorWorld = hand.CurrentHold.Position + bodyDriveOffset;
+            Vector3 desiredAnchorWorld = hand.CurrentHold.Position;
             desiredAnchorWorld.z = movePlaneZ;
             return desiredAnchorWorld;
         }
