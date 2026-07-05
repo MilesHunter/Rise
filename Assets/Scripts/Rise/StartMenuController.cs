@@ -8,7 +8,7 @@ namespace Rise
 {
     public sealed class StartMenuController : MonoBehaviour
     {
-        private const string GameplaySceneName = "Mountain";
+        private const string GameplaySceneName = "FinalPlayable";
         private readonly RectTransform[] entranceItems = new RectTransform[6];
         private readonly CanvasGroup[] entranceGroups = new CanvasGroup[6];
 

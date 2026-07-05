@@ -30,9 +30,20 @@ namespace Rise
         [SerializeField] private float visualPlaneZ = -0.18f;
         [SerializeField] private float handMarkerSize = 0.18f;
         [SerializeField] private float freeHandMarkerSize = 0.1f;
+        [SerializeField] private bool showHandDebugPoints = true;
+        [SerializeField] private float debugHandPointSize = 0.16f;
+        [SerializeField] private float debugTargetPointSize = 0.1f;
+        [SerializeField] private float debugHoldPointSize = 0.22f;
+        [SerializeField] private float debugLineWidth = 0.035f;
         [SerializeField] private Color idleHandColor = new Color(0.7f, 0.72f, 0.75f, 0.85f);
         [SerializeField] private Color reachingHandColor = new Color(1f, 0.78f, 0.2f, 1f);
         [SerializeField] private Color grippingHandColor = new Color(0.25f, 1f, 0.42f, 1f);
+        [SerializeField] private Color leftHandPointColor = new Color(0.05f, 0.85f, 1f, 1f);
+        [SerializeField] private Color leftTargetPointColor = new Color(0.1f, 0.55f, 1f, 0.45f);
+        [SerializeField] private Color leftHoldPointColor = new Color(0.65f, 1f, 1f, 1f);
+        [SerializeField] private Color rightHandPointColor = new Color(1f, 0.45f, 0.08f, 1f);
+        [SerializeField] private Color rightTargetPointColor = new Color(1f, 0.35f, 0.05f, 0.45f);
+        [SerializeField] private Color rightHoldPointColor = new Color(1f, 0.82f, 0.2f, 1f);
 
         private PlayerClimbController controller;
         private Quaternion hipsInitialLocalRotation;
@@ -48,8 +59,20 @@ namespace Rise
         private Vector3 visualRootInitialLocalScale;
         private Transform leftMarker;
         private Transform rightMarker;
+        private Transform leftTargetMarker;
+        private Transform rightTargetMarker;
+        private Transform leftHoldMarker;
+        private Transform rightHoldMarker;
         private Material leftMarkerMaterial;
         private Material rightMarkerMaterial;
+        private Material leftTargetMarkerMaterial;
+        private Material rightTargetMarkerMaterial;
+        private Material leftHoldMarkerMaterial;
+        private Material rightHoldMarkerMaterial;
+        private LineRenderer leftHoldLine;
+        private LineRenderer rightHoldLine;
+        private Material leftHoldLineMaterial;
+        private Material rightHoldLineMaterial;
         private float climbPose;
         private float restPose;
         private bool initialized;
@@ -121,10 +144,12 @@ namespace Rise
 
             AnimateLeg(leftUpperLeg, leftLowerLeg, leftUpperLegInitialLocalRotation, leftLowerLegInitialLocalRotation, true, controller.LeftKickVisual);
             AnimateLeg(rightUpperLeg, rightLowerLeg, rightUpperLegInitialLocalRotation, rightLowerLegInitialLocalRotation, false, controller.RightKickVisual);
-            UpdateHandStateVisual(controller.LeftHand, leftMarker, leftMarkerMaterial, leftHandBone, leftHandTarget);
-            UpdateHandStateVisual(controller.RightHand, rightMarker, rightMarkerMaterial, rightHandBone, rightHandTarget);
             ReportVisibleHandPoint(controller.LeftHand, leftHandBone);
             ReportVisibleHandPoint(controller.RightHand, rightHandBone);
+            UpdateHandStateVisual(controller.LeftHand, leftMarker, leftMarkerMaterial, leftHandBone, leftHandTarget);
+            UpdateHandStateVisual(controller.RightHand, rightMarker, rightMarkerMaterial, rightHandBone, rightHandTarget);
+            UpdateHandDebugVisuals(controller.LeftHand, leftMarker, leftMarkerMaterial, leftTargetMarker, leftTargetMarkerMaterial, leftHoldMarker, leftHoldMarkerMaterial, leftHoldLine, leftHoldLineMaterial);
+            UpdateHandDebugVisuals(controller.RightHand, rightMarker, rightMarkerMaterial, rightTargetMarker, rightTargetMarkerMaterial, rightHoldMarker, rightHoldMarkerMaterial, rightHoldLine, rightHoldLineMaterial);
         }
 
         private void CacheInitialRotations()
@@ -156,6 +181,12 @@ namespace Rise
             RemoveLegacyFakeArmVisuals();
             leftMarker ??= CreateMarker("LeftHandGripPoint", out leftMarkerMaterial);
             rightMarker ??= CreateMarker("RightHandGripPoint", out rightMarkerMaterial);
+            leftTargetMarker ??= CreateMarker("LeftHandTargetPoint", out leftTargetMarkerMaterial);
+            rightTargetMarker ??= CreateMarker("RightHandTargetPoint", out rightTargetMarkerMaterial);
+            leftHoldMarker ??= CreateMarker("LeftActualGripPoint", out leftHoldMarkerMaterial);
+            rightHoldMarker ??= CreateMarker("RightActualGripPoint", out rightHoldMarkerMaterial);
+            leftHoldLine ??= CreateLine("LeftHandToGripLine", out leftHoldLineMaterial);
+            rightHoldLine ??= CreateLine("RightHandToGripLine", out rightHoldLineMaterial);
         }
 
         private void AutoBindRig()
@@ -296,11 +327,74 @@ namespace Rise
                 return;
             }
 
-            Color color = hand.HasHold ? grippingHandColor : hand.IsPressed ? reachingHandColor : idleHandColor;
+            Color color = showHandDebugPoints
+                ? (hand.IsLeft ? leftHandPointColor : rightHandPointColor)
+                : hand.HasHold ? grippingHandColor : hand.IsPressed ? reachingHandColor : idleHandColor;
             float size = hand.HasHold || hand.IsPressed ? handMarkerSize : freeHandMarkerSize;
             marker.position = handBone != null ? handBone.position : target;
-            marker.localScale = Vector3.one * size;
+            marker.localScale = Vector3.one * (showHandDebugPoints ? debugHandPointSize : size);
             markerMaterial.color = color;
+        }
+
+        private void UpdateHandDebugVisuals(HandState hand, Transform handMarker, Material handMaterial, Transform targetMarker, Material targetMaterial, Transform holdMarker, Material holdMaterial, LineRenderer holdLine, Material lineMaterial)
+        {
+            SetActiveIfPresent(handMarker, showHandDebugPoints);
+            SetActiveIfPresent(targetMarker, showHandDebugPoints);
+            SetActiveIfPresent(holdMarker, showHandDebugPoints && hand.HasHold);
+            SetLineActive(holdLine, showHandDebugPoints && hand.HasHold);
+
+            if (!showHandDebugPoints)
+            {
+                return;
+            }
+
+            Color handColor = hand.IsLeft ? leftHandPointColor : rightHandPointColor;
+            Color targetColor = hand.IsLeft ? leftTargetPointColor : rightTargetPointColor;
+            Color holdColor = hand.IsLeft ? leftHoldPointColor : rightHoldPointColor;
+            Vector3 handPoint = ToVisualPlane(hand.HasVisibleWorldPoint ? hand.VisibleWorldPoint : hand.WorldTarget);
+            Vector3 targetPoint = ToVisualPlane(hand.WorldTarget);
+
+            if (handMarker != null && handMaterial != null)
+            {
+                handMarker.position = handPoint;
+                handMarker.localScale = Vector3.one * debugHandPointSize;
+                handMaterial.color = handColor;
+            }
+
+            if (targetMarker != null && targetMaterial != null)
+            {
+                targetMarker.position = targetPoint;
+                targetMarker.localScale = Vector3.one * debugTargetPointSize;
+                targetMaterial.color = targetColor;
+            }
+
+            if (!hand.HasHold || hand.CurrentHold == null)
+            {
+                return;
+            }
+
+            Vector3 holdPoint = ToVisualPlane(hand.CurrentHold.Position);
+            if (holdMarker != null && holdMaterial != null)
+            {
+                holdMarker.position = holdPoint;
+                holdMarker.localScale = Vector3.one * debugHoldPointSize;
+                holdMaterial.color = holdColor;
+            }
+
+            if (holdLine != null)
+            {
+                holdLine.positionCount = 2;
+                holdLine.SetPosition(0, handPoint);
+                holdLine.SetPosition(1, holdPoint);
+                holdLine.startWidth = debugLineWidth;
+                holdLine.endWidth = debugLineWidth;
+                holdLine.startColor = handColor;
+                holdLine.endColor = holdColor;
+                if (lineMaterial != null)
+                {
+                    lineMaterial.color = holdColor;
+                }
+            }
         }
 
         private void ReportVisibleHandPoint(HandState hand, Transform handBone)
@@ -335,6 +429,44 @@ namespace Rise
             material = CreateVisualMaterial(idleHandColor);
             marker.GetComponent<Renderer>().sharedMaterial = material;
             return marker.transform;
+        }
+
+        private LineRenderer CreateLine(string objectName, out Material material)
+        {
+            Transform existing = transform.Find(objectName);
+            LineRenderer line = existing != null ? existing.GetComponent<LineRenderer>() : null;
+            if (line == null)
+            {
+                GameObject lineObject = existing != null ? existing.gameObject : new GameObject(objectName);
+                lineObject.transform.SetParent(transform, false);
+                line = lineObject.AddComponent<LineRenderer>();
+            }
+
+            material = line.sharedMaterial != null ? line.sharedMaterial : CreateVisualMaterial(Color.white);
+            line.sharedMaterial = material;
+            line.useWorldSpace = true;
+            line.positionCount = 2;
+            line.numCapVertices = 4;
+            line.numCornerVertices = 2;
+            line.textureMode = LineTextureMode.Stretch;
+            line.enabled = false;
+            return line;
+        }
+
+        private static void SetActiveIfPresent(Transform target, bool active)
+        {
+            if (target != null && target.gameObject.activeSelf != active)
+            {
+                target.gameObject.SetActive(active);
+            }
+        }
+
+        private static void SetLineActive(LineRenderer line, bool active)
+        {
+            if (line != null && line.enabled != active)
+            {
+                line.enabled = active;
+            }
         }
 
         private static Material CreateVisualMaterial(Color color)
