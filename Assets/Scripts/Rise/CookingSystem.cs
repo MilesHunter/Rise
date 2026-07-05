@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System;
 using UnityEngine;
 
 namespace Rise
@@ -8,28 +9,39 @@ namespace Rise
         private readonly List<CookingRecipeDefinition> recipes = new List<CookingRecipeDefinition>();
         private PlayerInventory inventory;
         private PlayerVitals vitals;
+        private RestSessionController restSession;
 
         public IReadOnlyList<CookingRecipeDefinition> Recipes => recipes;
         public string LastMessage { get; private set; }
+        public event Action<bool, string, Vector3> CookingFinished;
 
         private void Awake()
         {
             EnsureInitialized();
         }
 
-        public bool TryCook(int index)
+        public bool TryCook(int index, bool requireLongRest = false)
         {
             EnsureInitialized();
             EnsureRecipes();
+            if (requireLongRest && (restSession == null || !restSession.AllowsCooking))
+            {
+                LastMessage = "Cooking is only available at long rest";
+                CookingFinished?.Invoke(false, LastMessage, transform.position);
+                return false;
+            }
+
             if (index < 0 || index >= recipes.Count)
             {
                 LastMessage = "No recipe selected";
+                CookingFinished?.Invoke(false, LastMessage, transform.position);
                 return false;
             }
 
             if (inventory == null || vitals == null)
             {
                 LastMessage = "Cooking requires player inventory and vitals";
+                CookingFinished?.Invoke(false, LastMessage, transform.position);
                 return false;
             }
 
@@ -38,12 +50,14 @@ namespace Rise
                 !inventory.LargePack.TryRemoveItems(recipe.IngredientItemId, recipe.IngredientQuantity))
             {
                 LastMessage = $"Missing {recipe.IngredientItemId}";
+                CookingFinished?.Invoke(false, LastMessage, transform.position);
                 return false;
             }
 
             vitals.RestoreByRecipe(recipe.HealthRestore, recipe.HungerRestore, recipe.WarmthRestore, recipe.SanityRestore);
             inventory.NotifyChanged();
             LastMessage = $"Cooked {recipe.DisplayName}";
+            CookingFinished?.Invoke(true, LastMessage, transform.position);
             return true;
         }
 
@@ -57,6 +71,11 @@ namespace Rise
             if (vitals == null)
             {
                 vitals = GetComponent<PlayerVitals>();
+            }
+
+            if (restSession == null)
+            {
+                restSession = GetComponent<RestSessionController>();
             }
 
             if (inventory != null)

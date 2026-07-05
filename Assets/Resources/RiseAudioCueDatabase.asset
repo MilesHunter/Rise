@@ -1,0 +1,25 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4e81b5a8828e54c47aaaa44911e4f396, type: 3}
+  m_Name: RiseAudioCueDatabase
+  m_EditorClassIdentifier: Assembly-CSharp::Rise.AudioCueDatabase
+  cues:
+  - {fileID: 11400000, guid: 2ddeffcafb5363c4d882c1389213dd59, type: 2}
+  - {fileID: 11400000, guid: 3bbcac3be0bcc4448819338e44708389, type: 2}
+  - {fileID: 11400000, guid: d3eb403433c433a4da0cbdca2b9215b4, type: 2}
+  - {fileID: 11400000, guid: 30736e61df7d9594c9747ff2d4782800, type: 2}
+  - {fileID: 11400000, guid: ad243191b265db445bc0f3c200c4ee22, type: 2}
+  - {fileID: 11400000, guid: 24749aa1cd7f79242b24779a02908162, type: 2}
+  - {fileID: 11400000, guid: aed43e5b485ee3d4d958affc180fba51, type: 2}
+  - {fileID: 11400000, guid: c7ef7bb02d61d4a40b8cad27620b0c64, type: 2}
+  - {fileID: 11400000, guid: a86e0b8874886dd4a8cdc8993e937608, type: 2}
+  - {fileID: 11400000, guid: 405a836e8f533aa4d8e6d26eb7af86cb, type: 2}

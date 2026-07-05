@@ -6,12 +6,14 @@ namespace Rise
     public sealed class AudioService : MonoBehaviour
     {
         private const int InitialPoolSize = 8;
+        private const string DefaultCueDatabaseResourcePath = "RiseAudioCueDatabase";
 
         [SerializeField] private AudioCueDatabase cueDatabase;
 
         private readonly List<AudioSource> sourcePool = new List<AudioSource>();
         private readonly List<AudioPlaybackHandle> activeHandles = new List<AudioPlaybackHandle>();
         private readonly Dictionary<AudioCueId, float> cooldownByCue = new Dictionary<AudioCueId, float>();
+        private bool restMixActive;
 
         public static AudioService Instance { get; private set; }
 
@@ -64,6 +66,15 @@ namespace Rise
             activeHandles.Remove(handle);
         }
 
+        public void SetRestMixActive(bool active)
+        {
+            restMixActive = active;
+            for (int i = 0; i < activeHandles.Count; i++)
+            {
+                activeHandles[i]?.SetVolumeMultiplier(GetCueVolumeMultiplier(activeHandles[i].CueId));
+            }
+        }
+
         private void Awake()
         {
             if (Instance != null && Instance != this)
@@ -74,6 +85,7 @@ namespace Rise
 
             Instance = this;
             DontDestroyOnLoad(gameObject);
+            EnsureCueDatabase();
             WarmPool();
         }
 
@@ -89,6 +101,7 @@ namespace Rise
                 }
 
                 handle.Sync();
+                handle.SetVolumeMultiplier(GetCueVolumeMultiplier(handle.CueId));
                 if (!handle.IsPlaying)
                 {
                     activeHandles.RemoveAt(i);
@@ -105,10 +118,12 @@ namespace Rise
 
             AudioSource source = GetAvailableSource();
             ConfigureSource(source, cue, clip, position, spatialBlendOverride);
+            float baseVolume = source.volume;
+            source.volume = baseVolume * GetCueVolumeMultiplier(cueId);
 
             AudioPlaybackHandle handle = useFollowTarget
-                ? new AudioPlaybackHandle(source, followTarget, localOffset)
-                : new AudioPlaybackHandle(source);
+                ? new AudioPlaybackHandle(source, cueId, baseVolume, followTarget, localOffset)
+                : new AudioPlaybackHandle(source, cueId, baseVolume);
 
             handle.Sync();
             source.Play();
@@ -124,8 +139,19 @@ namespace Rise
 
         private bool TryGetCue(AudioCueId cueId, out AudioCue cue)
         {
+            EnsureCueDatabase();
             cue = null;
             return cueDatabase != null && cueDatabase.TryGetCue(cueId, out cue);
+        }
+
+        private void EnsureCueDatabase()
+        {
+            if (cueDatabase != null)
+            {
+                return;
+            }
+
+            cueDatabase = Resources.Load<AudioCueDatabase>(DefaultCueDatabaseResourcePath);
         }
 
         private bool CanPlay(AudioCueId cueId, AudioCue cue)
@@ -192,6 +218,31 @@ namespace Rise
 
             sourcePool.Add(source);
             return source;
+        }
+
+        private float GetCueVolumeMultiplier(AudioCueId cueId)
+        {
+            if (!restMixActive)
+            {
+                return 1f;
+            }
+
+            switch (cueId)
+            {
+                case AudioCueId.WindLoop:
+                    return 0.3f;
+                case AudioCueId.CampfireLoop:
+                case AudioCueId.ShortRestStart:
+                case AudioCueId.ShortRestComplete:
+                case AudioCueId.LongRestStart:
+                case AudioCueId.LongRestComplete:
+                    return 1f;
+                case AudioCueId.BreathingLightLoop:
+                case AudioCueId.BreathingHeavyLoop:
+                    return 0.65f;
+                default:
+                    return 0.55f;
+            }
         }
     }
 }
