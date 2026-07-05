@@ -109,10 +109,10 @@ namespace Rise
             }
 
             Transform followRoot = visualRoot != null ? visualRoot : transform;
-            Vector3 followPosition = controller.transform.position + rootFollowOffset;
-            followPosition.z = visualPlaneZ;
-            followRoot.position = followPosition;
-            followRoot.rotation = Quaternion.identity;
+            Vector3 followPosition = rootFollowOffset;
+            followPosition.z += visualPlaneZ;
+            followRoot.localPosition = followPosition;
+            followRoot.localRotation = Quaternion.identity;
             followRoot.localScale = visualRootInitialLocalScale == Vector3.zero ? Vector3.one * modelScale : visualRootInitialLocalScale;
 
             float horizontalVelocity = controller.BodyVelocity.x;

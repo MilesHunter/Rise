@@ -284,6 +284,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Rise.ResourceNode
   revealInterval: 1
+  lootTable: {fileID: 0}
   fallbackItemIds:
   - anchor_piton
   - food_ration
@@ -12720,6 +12721,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Rise.ResourceNode
   revealInterval: 1
+  lootTable: {fileID: 0}
   fallbackItemIds:
   - anchor_piton
   - food_ration
@@ -13647,6 +13649,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Rise.ResourceNode
   revealInterval: 1
+  lootTable: {fileID: 0}
   fallbackItemIds:
   - anchor_piton
   - food_ration
@@ -20299,6 +20302,18 @@ PrefabInstance:
       propertyPath: m_Center.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 1502917893274282916, guid: 72ff82e5611db9e45bca5b1695ddb6d3, type: 3}
+      propertyPath: handReachLimit
+      value: 1.8
+      objectReference: {fileID: 0}
+    - target: {fileID: 1502917893274282916, guid: 72ff82e5611db9e45bca5b1695ddb6d3, type: 3}
+      propertyPath: freeHandReachWhenOtherHandHeld
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 2665605497880732690, guid: 72ff82e5611db9e45bca5b1695ddb6d3, type: 3}
+      propertyPath: showHandDebugPoints
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 2781723283177703430, guid: 72ff82e5611db9e45bca5b1695ddb6d3, type: 3}
       propertyPath: m_LocalPosition.x
       value: -4.88
@@ -20338,6 +20353,10 @@ PrefabInstance:
     - target: {fileID: 2781723283177703430, guid: 72ff82e5611db9e45bca5b1695ddb6d3, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4264093450443544765, guid: 72ff82e5611db9e45bca5b1695ddb6d3, type: 3}
+      propertyPath: m_Constraints
+      value: 56
       objectReference: {fileID: 0}
     - target: {fileID: 4326338099686035201, guid: 72ff82e5611db9e45bca5b1695ddb6d3, type: 3}
       propertyPath: m_Name
