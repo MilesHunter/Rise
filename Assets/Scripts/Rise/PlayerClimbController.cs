@@ -47,6 +47,7 @@ namespace Rise
         [SerializeField] private float lowSanityAimJitter = 0.12f;
         [SerializeField] private float freeHandsStaminaRecoveryDelay = DefaultFreeHandsStaminaRecoveryDelay;
         [SerializeField] private float freeHandsStaminaRecoveryPerSecond = DefaultFreeHandsStaminaRecoveryPerSecond;
+        [SerializeField] private float ropeHandFeedbackStrength = 0.35f;
 
         private Rigidbody body;
         private Camera mainCamera;
@@ -259,10 +260,7 @@ namespace Rise
                 return;
             }
 
-            if (Tools == null || Tools.ActiveRopeHand != LeftHand)
-            {
-                HandleHand(LeftHand, Mouse.current.leftButton.wasPressedThisFrame, Mouse.current.leftButton.wasReleasedThisFrame);
-            }
+            HandleHand(LeftHand, Mouse.current.leftButton.wasPressedThisFrame, Mouse.current.leftButton.wasReleasedThisFrame);
             HandleHand(RightHand, Mouse.current.rightButton.wasPressedThisFrame, Mouse.current.rightButton.wasReleasedThisFrame);
         }
 
@@ -273,7 +271,7 @@ namespace Rise
                 return;
             }
 
-            if (Tools != null && Tools.IsPointerToolMode && hand == RightHand)
+            if (Tools != null && Tools.IsPointerToolMode && hand == RightHand && !hand.HasHold)
             {
                 HandleRopeHand(hand, pressed, released);
                 return;
@@ -302,7 +300,7 @@ namespace Rise
                     return;
                 }
 
-                TryGrabHand(hand, null, runtimeGrip);
+                TryGrabHand(hand, hoveredHold, runtimeGrip);
             }
 
             if (released)
@@ -319,16 +317,19 @@ namespace Rise
             if (pressed)
             {
                 hand.IsPressed = true;
-                ClimbHold hoveredHold = FindHoveredHold(CursorWorld);
-                ClimbSurface hoveredSurface = hoveredHold == null ? FindHoveredSurface(CursorWorld) : null;
 
-                if (Tools.TryFireRope(hand, CursorWorld, hoveredHold, hoveredSurface))
+                bool hasSurfacePoint = TryFindBestSurface(CursorWorld, out ClimbSurface hoveredSurface, out Vector3 surfacePoint);
+                if (hasSurfacePoint && Tools.TryFireRopeAtPoint(hand, surfacePoint, hoveredSurface, out string failureReason))
                 {
                     HandState ropeHand = Tools.ActiveRopeHand;
                     ClimbHold ropeHold = ropeHand != null ? Tools.GetRopeHold(ropeHand) : null;
                     if (ropeHold != null)
                     {
-                        ReleaseHand(ropeHand);
+                        if (ropeHand.HasHold)
+                        {
+                            ReleaseHand(ropeHand);
+                        }
+
                         ropeHand.CurrentHold = ropeHold;
                         ropeHand.OwnsRuntimeHold = false;
                         ropeHand.State = HandGrabState.AssistedHold;
@@ -340,6 +341,8 @@ namespace Rise
                 }
                 else
                 {
+                    string displayFailureReason = hasSurfacePoint ? Tools.LastToolFailure : "Aim at a rope-ready wall";
+                    CurrentPrompt = displayFailureReason;
                     GrabFailed?.Invoke(hand, hand.WorldTarget);
                 }
             }
@@ -347,12 +350,6 @@ namespace Rise
             if (released)
             {
                 hand.IsPressed = false;
-                HandState ropeHand = Tools.ActiveRopeHand;
-                if (ropeHand != null && Tools.HasActiveRope(ropeHand))
-                {
-                    Tools.ReleaseRope(ropeHand);
-                    ReleaseHand(ropeHand);
-                }
             }
         }
 
@@ -510,6 +507,7 @@ namespace Rise
 
         private IEnumerator PerformRest(RestPoint restPoint)
         {
+            Tools.ClearActiveRope();
             ReleaseHand(LeftHand);
             ReleaseHand(RightHand);
             body.isKinematic = true;
@@ -580,7 +578,24 @@ namespace Rise
             Vector3 force = delta * holdSpringStrength - velocityAtAnchor * holdSpringDamping;
             force.z = 0f;
             body.AddForceAtPosition(force, anchorWorld, ForceMode.Acceleration);
+            ApplyRopeHandFeedback(hand, anchorWorld, force);
             hand.WorldTarget = GetHoldTarget(hand);
+        }
+
+        private void ApplyRopeHandFeedback(HandState hand, Vector3 anchorWorld, Vector3 force)
+        {
+            if (hand.CurrentHold == null || hand.CurrentHold.HoldType != ClimbHoldType.Rope || ropeHandFeedbackStrength <= 0f)
+            {
+                return;
+            }
+
+            Rigidbody ropeBody = hand.CurrentHold.GetComponent<Rigidbody>();
+            if (ropeBody == null || ropeBody.isKinematic)
+            {
+                return;
+            }
+
+            ropeBody.AddForceAtPosition(-force * ropeHandFeedbackStrength, anchorWorld, ForceMode.Acceleration);
         }
 
         private void ApplyBodyDrive()
@@ -1109,6 +1124,7 @@ namespace Rise
 
         private void RespawnAtCheckpoint()
         {
+            Tools.ClearActiveRope();
             ReleaseHand(LeftHand);
             ReleaseHand(RightHand);
             body.position = checkpoint;
@@ -1305,6 +1321,7 @@ namespace Rise
             }
 
             currentRestPoint = restPoint;
+            Tools.ClearActiveRope();
             ReleaseHand(LeftHand);
             ReleaseHand(RightHand);
             body.linearVelocity = Vector3.zero;

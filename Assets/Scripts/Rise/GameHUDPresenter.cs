@@ -75,7 +75,7 @@ namespace Rise
 
         private void Update()
         {
-            if (controller == null || vitals == null || inventory == null)
+            if (controller == null || vitals == null)
             {
                 return;
             }
@@ -102,7 +102,9 @@ namespace Rise
 
             if (toolText != null)
             {
-                toolText.text = $"Tool {(controller.Tools.ToolMode ? "[Armed]" : "[Idle]")} {controller.Tools.SelectedTool}  Anchor {inventory.CountSmall(PlayerInventory.AnchorItemId)}  Rope {inventory.CountSmall(PlayerInventory.RopeItemId)}";
+                int anchorCount = inventory != null ? inventory.CountSmall(PlayerInventory.AnchorItemId) : 0;
+                int ropeCount = inventory != null ? inventory.CountSmall(PlayerInventory.RopeItemId) : 0;
+                toolText.text = $"Tool {(controller.Tools.ToolMode ? "[Armed]" : "[Idle]")} {controller.Tools.SelectedTool}  Anchor {anchorCount}  Rope {ropeCount}";
             }
 
             if (promptText != null)
@@ -210,6 +212,22 @@ namespace Rise
             if (topPanel != null && staminaValueText == null)
             {
                 staminaValueText = CreateStaminaValueText(topPanel, font, staminaBackground as RectTransform);
+            }
+            if (staminaText != null)
+            {
+                staminaText.rectTransform.anchorMin = new Vector2(0f, 1f);
+                staminaText.rectTransform.anchorMax = new Vector2(0f, 1f);
+                staminaText.rectTransform.pivot = new Vector2(0f, 1f);
+                staminaText.rectTransform.anchoredPosition = new Vector2(14f, -32f);
+                staminaText.rectTransform.sizeDelta = new Vector2(210f, 20f);
+            }
+            if (staminaValueText != null && staminaBackground is RectTransform staminaBackgroundRect)
+            {
+                staminaValueText.rectTransform.anchorMin = new Vector2(0f, 1f);
+                staminaValueText.rectTransform.anchorMax = new Vector2(0f, 1f);
+                staminaValueText.rectTransform.pivot = new Vector2(0f, 1f);
+                staminaValueText.rectTransform.anchoredPosition = staminaBackgroundRect.anchoredPosition + new Vector2(staminaBackgroundRect.sizeDelta.x + 8f, -4f);
+                staminaValueText.rectTransform.sizeDelta = new Vector2(74f, 22f);
             }
 
             toolText = FindText(topPanel, "ToolText");
@@ -636,6 +654,36 @@ namespace Rise
             return text;
         }
 
+        private static void ConfigureStaminaBarLayout(RectTransform topPanel, RectTransform staminaBackground, RectTransform staminaFillRect)
+        {
+            if (topPanel != null)
+            {
+                topPanel.anchorMin = new Vector2(0f, 1f);
+                topPanel.anchorMax = new Vector2(0f, 1f);
+                topPanel.pivot = new Vector2(0f, 1f);
+                topPanel.anchoredPosition = new Vector2(12f, -12f);
+                topPanel.sizeDelta = new Vector2(320f, 58f);
+            }
+
+            if (staminaBackground != null)
+            {
+                staminaBackground.anchorMin = new Vector2(0f, 1f);
+                staminaBackground.anchorMax = new Vector2(0f, 1f);
+                staminaBackground.pivot = new Vector2(0f, 1f);
+                staminaBackground.anchoredPosition = new Vector2(14f, -14f);
+                staminaBackground.sizeDelta = new Vector2(220f, 16f);
+            }
+
+            if (staminaFillRect != null)
+            {
+                staminaFillRect.anchorMin = Vector2.zero;
+                staminaFillRect.anchorMax = Vector2.one;
+                staminaFillRect.pivot = new Vector2(0f, 1f);
+                staminaFillRect.anchoredPosition = Vector2.zero;
+                staminaFillRect.sizeDelta = Vector2.zero;
+            }
+        }
+
         private static ResourceIconDisplay CreateResourceDisplay(string name, Transform parent, Font font, Vector2 anchoredPosition, Sprite[] frames)
         {
             GameObject root = new GameObject(name, typeof(RectTransform));
@@ -747,7 +795,7 @@ namespace Rise
 
         private void EnsureBuilt()
         {
-            if (controller != null && vitals != null && inventory != null && !built)
+            if (controller != null && vitals != null && !built)
             {
                 BuildCanvas();
             }

@@ -76,7 +76,7 @@ namespace Rise.Editor
             Require(ui.transform.Find("InventoryPanel/LargeGrid") != null, "large pack grid missing");
             RequireText(ui.transform, "RestPanel/RestMenu");
 
-            RestPoint[] restPoints = UnityEngine.Object.FindObjectsByType<RestPoint>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+            RestPoint[] restPoints = UnityEngine.Object.FindObjectsByType<RestPoint>(FindObjectsInactive.Include);
             int shortRestCount = 0;
             int longRestCount = 0;
             for (int i = 0; i < restPoints.Length; i++)
