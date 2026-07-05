@@ -32,6 +32,13 @@ namespace Rise
         private Image hungerOverlay;
         private Image warmthOverlay;
         private Image sanityOverlay;
+        private Image staminaVignetteTop;
+        private Image staminaVignetteBottom;
+        private Image staminaVignetteLeft;
+        private Image staminaVignetteRight;
+        private Tween staminaVignetteTween;
+        private float displayedStaminaVignette01;
+        private float targetStaminaVignette01 = -1f;
         private GameObject resourceSearchPanel;
         private Image resourceSearchFill;
         private Text resourceSearchText;
@@ -181,6 +188,12 @@ namespace Rise
                 staminaFillTween.Kill();
                 staminaFillTween = null;
             }
+
+            if (staminaVignetteTween != null)
+            {
+                staminaVignetteTween.Kill();
+                staminaVignetteTween = null;
+            }
         }
 
         private void BindSceneHud(Font font)
@@ -231,6 +244,7 @@ namespace Rise
             hungerOverlay = FindOrCreateOverlayImage(overlay, "HungerOverlay", new Color(0.65f, 0.42f, 0.05f, 0f));
             warmthOverlay = FindOrCreateOverlayImage(overlay, "WarmthOverlay", new Color(0.05f, 0.35f, 1f, 0f));
             sanityOverlay = FindOrCreateOverlayImage(overlay, "SanityOverlay", new Color(0.35f, 0f, 0.55f, 0f));
+            EnsureStaminaVignette(overlay);
         }
 
         private void BindStatusOverlay()
@@ -250,6 +264,7 @@ namespace Rise
             hungerOverlay = hunger != null ? hunger.GetComponent<Image>() : null;
             warmthOverlay = warmth != null ? warmth.GetComponent<Image>() : null;
             sanityOverlay = sanity != null ? sanity.GetComponent<Image>() : null;
+            EnsureStaminaVignette(overlay);
         }
 
         private void UpdateStatusOverlays()
@@ -258,6 +273,7 @@ namespace Rise
             SetOverlayAlpha(hungerOverlay, new Color(0.62f, 0.40f, 0.05f, 1f), vitals.LowHunger ? 0.13f : vitals.WarningHunger ? 0.05f : 0f, 3.2f);
             SetOverlayAlpha(warmthOverlay, new Color(0.05f, 0.38f, 1f, 1f), vitals.LowWarmth ? 0.14f : vitals.WarningWarmth ? 0.05f : 0f, 2.8f);
             SetOverlayAlpha(sanityOverlay, new Color(0.34f, 0f, 0.55f, 1f), vitals.LowSanity ? 0.12f : vitals.WarningSanity ? 0.04f : 0f, 6f);
+            UpdateStaminaVignette();
             UpdateStatusOverlayShake();
         }
 
@@ -394,6 +410,117 @@ namespace Rise
             image.color = baseColor;
         }
 
+        private void EnsureStaminaVignette(Transform overlay)
+        {
+            Transform root = overlay.Find("StaminaVignette");
+            if (root == null)
+            {
+                GameObject rootObject = new GameObject("StaminaVignette", typeof(RectTransform));
+                rootObject.transform.SetParent(overlay, false);
+                ConfigureFullScreenRect(rootObject.GetComponent<RectTransform>());
+                root = rootObject.transform;
+            }
+
+            root.SetAsLastSibling();
+            staminaVignetteTop = FindOrCreateVignetteEdge(root, "Top", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 1f));
+            staminaVignetteBottom = FindOrCreateVignetteEdge(root, "Bottom", new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(0.5f, 0f));
+            staminaVignetteLeft = FindOrCreateVignetteEdge(root, "Left", new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0.5f));
+            staminaVignetteRight = FindOrCreateVignetteEdge(root, "Right", new Vector2(1f, 0f), new Vector2(1f, 1f), new Vector2(1f, 0.5f));
+            ApplyStaminaVignetteVisual(0f);
+        }
+
+        private void UpdateStaminaVignette()
+        {
+            float stamina01 = Mathf.Clamp01(vitals.Stamina / vitals.MaxStamina);
+            float severity = Mathf.InverseLerp(0.22f, 0.02f, stamina01);
+            AnimateStaminaVignette(severity);
+        }
+
+        private void AnimateStaminaVignette(float severity)
+        {
+            severity = Mathf.Clamp01(severity);
+            if (targetStaminaVignette01 < 0f)
+            {
+                targetStaminaVignette01 = severity;
+                displayedStaminaVignette01 = severity;
+                ApplyStaminaVignetteVisual(severity);
+                return;
+            }
+
+            if (Mathf.Abs(targetStaminaVignette01 - severity) <= 0.015f)
+            {
+                return;
+            }
+
+            targetStaminaVignette01 = severity;
+            if (staminaVignetteTween != null)
+            {
+                staminaVignetteTween.Kill();
+            }
+
+            staminaVignetteTween = DOTween
+                .To(() => displayedStaminaVignette01, ApplyStaminaVignetteVisual, severity, 0.35f)
+                .SetEase(Ease.OutCubic)
+                .SetUpdate(true);
+        }
+
+        private void ApplyStaminaVignetteVisual(float severity)
+        {
+            displayedStaminaVignette01 = Mathf.Clamp01(severity);
+            float pulse = displayedStaminaVignette01 > 0f
+                ? Mathf.Lerp(0.86f, 1f, Mathf.PingPong(Time.unscaledTime * 2.8f, 1f))
+                : 0f;
+            float alpha = Mathf.Lerp(0f, 0.52f, displayedStaminaVignette01) * pulse;
+            float verticalThickness = Mathf.Lerp(0f, 230f, displayedStaminaVignette01);
+            float horizontalThickness = Mathf.Lerp(0f, 170f, displayedStaminaVignette01);
+
+            ApplyVignetteEdge(staminaVignetteTop, alpha, new Vector2(0f, verticalThickness));
+            ApplyVignetteEdge(staminaVignetteBottom, alpha, new Vector2(0f, verticalThickness));
+            ApplyVignetteEdge(staminaVignetteLeft, alpha, new Vector2(horizontalThickness, 0f));
+            ApplyVignetteEdge(staminaVignetteRight, alpha, new Vector2(horizontalThickness, 0f));
+        }
+
+        private static void ApplyVignetteEdge(Image image, float alpha, Vector2 sizeDelta)
+        {
+            if (image == null)
+            {
+                return;
+            }
+
+            image.color = new Color(0f, 0f, 0f, alpha);
+            image.rectTransform.sizeDelta = sizeDelta;
+        }
+
+        private static Image FindOrCreateVignetteEdge(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot)
+        {
+            Transform existing = parent.Find(name);
+            Image image;
+            if (existing != null)
+            {
+                image = existing.GetComponent<Image>();
+                if (image == null)
+                {
+                    image = existing.gameObject.AddComponent<Image>();
+                }
+            }
+            else
+            {
+                GameObject imageObject = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                imageObject.transform.SetParent(parent, false);
+                image = imageObject.GetComponent<Image>();
+            }
+
+            RectTransform rect = image.rectTransform;
+            rect.anchorMin = anchorMin;
+            rect.anchorMax = anchorMax;
+            rect.pivot = pivot;
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = Vector2.zero;
+            image.color = new Color(0f, 0f, 0f, 0f);
+            image.raycastTarget = false;
+            return image;
+        }
+
         private static void ConfigureStaminaFillImage(Image image)
         {
             if (image == null)
@@ -418,10 +545,43 @@ namespace Rise
             rect.offsetMax = Vector2.zero;
         }
 
-        private void SetStaminaFillAmount(float stamina01)
+        private void AnimateStaminaFillAmount(float stamina01)
         {
-            staminaFill.fillAmount = stamina01;
-            staminaFill.color = GetStaminaFillColor(stamina01);
+            if (staminaFillRect == null)
+            {
+                staminaFillRect = staminaFill.rectTransform;
+            }
+
+            if (targetStamina01 < 0f)
+            {
+                targetStamina01 = stamina01;
+                displayedStamina01 = stamina01;
+                ApplyStaminaFillVisual(stamina01);
+                return;
+            }
+
+            if (Mathf.Abs(targetStamina01 - stamina01) <= 0.001f)
+            {
+                return;
+            }
+
+            targetStamina01 = stamina01;
+            if (staminaFillTween != null)
+            {
+                staminaFillTween.Kill();
+            }
+
+            staminaFillTween = DOTween
+                .To(() => displayedStamina01, ApplyStaminaFillVisual, stamina01, StaminaTweenDuration)
+                .SetEase(Ease.OutCubic)
+                .SetUpdate(true);
+        }
+
+        private void ApplyStaminaFillVisual(float stamina01)
+        {
+            displayedStamina01 = Mathf.Clamp01(stamina01);
+            staminaFill.fillAmount = displayedStamina01;
+            staminaFill.color = GetStaminaFillColor(displayedStamina01);
 
             if (staminaFillRect == null)
             {
@@ -429,7 +589,7 @@ namespace Rise
             }
 
             Vector2 anchorMax = staminaFillRect.anchorMax;
-            anchorMax.x = stamina01;
+            anchorMax.x = displayedStamina01;
             staminaFillRect.anchorMax = anchorMax;
             staminaFillRect.offsetMax = Vector2.zero;
             staminaFillRect.offsetMin = Vector2.zero;
