@@ -9,6 +9,8 @@ namespace Rise
     public sealed class StartMenuController : MonoBehaviour
     {
         private const string GameplaySceneName = "FinalPlayable";
+        private const string CoverResourcePath = "UI/Rise_Cover";
+        private const string TitleResourcePath = "UI/Rise_Title";
         private readonly RectTransform[] entranceItems = new RectTransform[6];
         private readonly CanvasGroup[] entranceGroups = new CanvasGroup[6];
 
@@ -59,6 +61,7 @@ namespace Rise
             ClearChildren(transform);
 
             Font font = ResolveFont();
+            CreateCoverBackground();
 
             Image shade = CreatePanel("LeftShade", transform, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0f), new Vector2(560f, 0f));
             shade.color = new Color(0.025f, 0.035f, 0.045f, 0.9f);
@@ -76,11 +79,9 @@ namespace Rise
             menuRoot.sizeDelta = new Vector2(390f, 620f);
             menuGroup = rootObject.GetComponent<CanvasGroup>();
 
-            Text title = CreateText("Title", menuRoot, font, "RISE", 76, new Vector2(0f, 208f), new Vector2(390f, 92f));
-            title.color = new Color(0.94f, 0.97f, 0.96f, 1f);
-            title.fontStyle = FontStyle.Bold;
+            RectTransform titleRect = CreateTitleArt(menuRoot, font);
 
-            Text subtitle = CreateText("Subtitle", menuRoot, font, "Climb. Rest. Endure.", 24, new Vector2(2f, 154f), new Vector2(390f, 38f));
+            Text subtitle = CreateText("Subtitle", menuRoot, font, "A mountain survival climb", 22, new Vector2(2f, 128f), new Vector2(390f, 38f));
             subtitle.color = new Color(0.66f, 0.76f, 0.78f, 1f);
 
             startButton = CreateMenuButton("StartButton", "开始游戏", new Vector2(0f, 54f), OnStartGame);
@@ -91,7 +92,7 @@ namespace Rise
             statusText = CreateText("Status", menuRoot, font, string.Empty, 17, new Vector2(2f, -228f), new Vector2(390f, 40f));
             statusText.color = new Color(0.62f, 0.72f, 0.72f, 0f);
 
-            entranceItems[0] = title.rectTransform;
+            entranceItems[0] = titleRect;
             entranceItems[1] = subtitle.rectTransform;
             entranceItems[2] = startButton.GetComponent<RectTransform>();
             entranceItems[3] = continueButton.GetComponent<RectTransform>();
@@ -103,6 +104,34 @@ namespace Rise
                 CanvasGroup group = entranceItems[i].gameObject.AddComponent<CanvasGroup>();
                 entranceGroups[i] = group;
             }
+        }
+
+        private void CreateCoverBackground()
+        {
+            Image background = CreatePanel("CoverBackground", transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+            background.sprite = LoadSpriteFromResources(CoverResourcePath);
+            background.color = background.sprite != null ? Color.white : new Color(0.035f, 0.047f, 0.055f, 1f);
+            background.type = Image.Type.Simple;
+            background.preserveAspect = false;
+        }
+
+        private RectTransform CreateTitleArt(Transform parent, Font font)
+        {
+            Sprite titleSprite = LoadSpriteFromResources(TitleResourcePath);
+            if (titleSprite != null)
+            {
+                Image title = CreatePanel("TitleArt", parent, new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(-18f, 194f), new Vector2(440f, 178f));
+                title.sprite = titleSprite;
+                title.type = Image.Type.Simple;
+                title.preserveAspect = true;
+                title.color = Color.white;
+                return title.rectTransform;
+            }
+
+            Text fallbackTitle = CreateText("Title", parent, font, "RISE", 76, new Vector2(0f, 208f), new Vector2(390f, 92f));
+            fallbackTitle.color = new Color(0.94f, 0.97f, 0.96f, 1f);
+            fallbackTitle.fontStyle = FontStyle.Bold;
+            return fallbackTitle.rectTransform;
         }
 
         private void PlayEntrance()
@@ -275,6 +304,23 @@ namespace Rise
             text.verticalOverflow = VerticalWrapMode.Overflow;
             text.color = Color.white;
             return text;
+        }
+
+        private static Sprite LoadSpriteFromResources(string resourcePath)
+        {
+            Sprite sprite = Resources.Load<Sprite>(resourcePath);
+            if (sprite != null)
+            {
+                return sprite;
+            }
+
+            Texture2D texture = Resources.Load<Texture2D>(resourcePath);
+            if (texture == null)
+            {
+                return null;
+            }
+
+            return Sprite.Create(texture, new Rect(0f, 0f, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100f);
         }
 
         private static Font ResolveFont()

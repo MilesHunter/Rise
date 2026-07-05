@@ -13,6 +13,7 @@ namespace Rise
         [SerializeField] private float ropeSag = 0.45f;
 
         private PlayerClimbController controller;
+        private PlayerInventory inventory;
         private ClimbHold activeAnchor;
         private RopeState activeRope;
         private GameObject generatedRoot;
@@ -26,6 +27,12 @@ namespace Rise
         public void Initialize(PlayerClimbController owner, Transform root)
         {
             controller = owner;
+            inventory = owner != null ? owner.Inventory : null;
+            if (inventory == null && owner != null)
+            {
+                inventory = owner.GetComponent<PlayerInventory>();
+            }
+
             if (generatedRoot == null)
             {
                 generatedRoot = new GameObject("GeneratedTools");
@@ -120,7 +127,12 @@ namespace Rise
 
             Vector3 source = controller.GetHandAnchorWorld(ropeHand);
             anchorPoint.z = 0f;
-            if (Vector3.Distance(source, anchorPoint) > ropeRange || !controller.Vitals.TrySpendStamina(4f))
+            if (Vector3.Distance(source, anchorPoint) > ropeRange || !HasToolItem(PlayerInventory.RopeItemId) || !controller.Vitals.TrySpendStamina(4f))
+            {
+                return false;
+            }
+
+            if (!ConsumeToolItem(PlayerInventory.RopeItemId))
             {
                 return false;
             }
@@ -208,7 +220,12 @@ namespace Rise
                 return false;
             }
 
-            if (!controller.Vitals.TrySpendStamina(2f))
+            if (!HasToolItem(PlayerInventory.AnchorItemId) || !controller.Vitals.TrySpendStamina(2f))
+            {
+                return false;
+            }
+
+            if (!ConsumeToolItem(PlayerInventory.AnchorItemId))
             {
                 return false;
             }
@@ -279,6 +296,26 @@ namespace Rise
             }
 
             activeRope = null;
+        }
+
+        private bool HasToolItem(string itemId)
+        {
+            if (inventory == null && controller != null)
+            {
+                inventory = controller.Inventory != null ? controller.Inventory : controller.GetComponent<PlayerInventory>();
+            }
+
+            return inventory == null || inventory.CountSmall(itemId) > 0;
+        }
+
+        private bool ConsumeToolItem(string itemId)
+        {
+            if (inventory == null && controller != null)
+            {
+                inventory = controller.Inventory != null ? controller.Inventory : controller.GetComponent<PlayerInventory>();
+            }
+
+            return inventory == null || inventory.TryConsumeSmall(itemId, 1);
         }
 
         private sealed class RopeState

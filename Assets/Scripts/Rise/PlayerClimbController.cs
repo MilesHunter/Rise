@@ -40,6 +40,7 @@ namespace Rise
         private Rigidbody body;
         private Camera mainCamera;
         private RestPoint currentRestPoint;
+        private ResourceNode currentResourceNode;
         private GoalPoint currentGoalPoint;
         private Vector3 checkpoint;
         private Vector3 bodyDriveOffset;
@@ -121,6 +122,7 @@ namespace Rise
             UpdateToolInput();
             UpdateHandInput();
             UpdateKickInput();
+            UpdateResourceInput();
             UpdateRestInput();
             UpdatePrompt();
             DecayKickVisuals();
@@ -150,6 +152,11 @@ namespace Rise
                 currentRestPoint = restPoint;
             }
 
+            if (other.TryGetComponent(out ResourceNode resourceNode))
+            {
+                currentResourceNode = resourceNode;
+            }
+
             if (other.TryGetComponent(out GoalPoint goalPoint))
             {
                 currentGoalPoint = goalPoint;
@@ -164,6 +171,11 @@ namespace Rise
             if (other.TryGetComponent(out RestPoint restPoint) && currentRestPoint == restPoint)
             {
                 currentRestPoint = null;
+            }
+
+            if (other.TryGetComponent(out ResourceNode resourceNode) && currentResourceNode == resourceNode)
+            {
+                currentResourceNode = null;
             }
 
             if (other.TryGetComponent(out GoalPoint goalPoint) && currentGoalPoint == goalPoint)
@@ -396,22 +408,47 @@ namespace Rise
 
             if (Keyboard.current.qKey.wasPressedThisFrame && Vitals.TrySpendStamina(4f))
             {
-                body.AddForce(new Vector3(-1.2f, 2.5f, 0f).normalized * kickForce, ForceMode.Impulse);
+                float multiplier = Inventory != null ? Inventory.KickForceMultiplier : 1f;
+                body.AddForce(new Vector3(-1.2f, 2.5f, 0f).normalized * kickForce * multiplier, ForceMode.Impulse);
                 LeftKickVisual = 1f;
                 KickPerformed?.Invoke(true, transform.position + new Vector3(-0.35f, 0.25f, 0f));
             }
 
             if (Keyboard.current.eKey.wasPressedThisFrame && Vitals.TrySpendStamina(4f))
             {
-                body.AddForce(new Vector3(1.2f, 2.5f, 0f).normalized * kickForce, ForceMode.Impulse);
+                float multiplier = Inventory != null ? Inventory.KickForceMultiplier : 1f;
+                body.AddForce(new Vector3(1.2f, 2.5f, 0f).normalized * kickForce * multiplier, ForceMode.Impulse);
                 RightKickVisual = 1f;
                 KickPerformed?.Invoke(false, transform.position + new Vector3(0.35f, 0.25f, 0f));
             }
         }
 
+        private void UpdateResourceInput()
+        {
+            if (Keyboard.current == null || currentResourceNode == null || IsRestLocked || hasWon)
+            {
+                return;
+            }
+
+            if (!Keyboard.current.fKey.wasPressedThisFrame)
+            {
+                return;
+            }
+
+            if (currentResourceNode.RevealedCount > 0)
+            {
+                bool taken = currentResourceNode.TryTakeRevealed(Inventory, 0);
+                CurrentPrompt = taken ? currentResourceNode.BuildStatusText() : "Small pack full";
+                return;
+            }
+
+            currentResourceNode.StartSearch(this);
+            CurrentPrompt = currentResourceNode.BuildStatusText();
+        }
+
         private void UpdateRestInput()
         {
-            if (Keyboard.current == null || currentRestPoint == null || IsRestLocked || hasWon)
+            if (Keyboard.current == null || currentRestPoint == null || currentResourceNode != null || IsRestLocked || hasWon)
             {
                 return;
             }
@@ -471,6 +508,12 @@ namespace Rise
                 return;
             }
 
+            if (currentResourceNode != null)
+            {
+                CurrentPrompt = currentResourceNode.BuildStatusText();
+                return;
+            }
+
             CurrentPrompt = Tools.ToolMode
                 ? $"Tool mode: {Tools.SelectedTool}. {Tools.GetToolPromptSuffix()}"
                 : BuildGripPrompt();
@@ -512,7 +555,8 @@ namespace Rise
             }
 
             hand.HoldDrainTimer -= 1f;
-            if (!Vitals.TrySpendStamina(hand.CurrentHold.HoldDrainPerSecond))
+            float drainMultiplier = Inventory != null ? Inventory.HoldDrainMultiplier : 1f;
+            if (!Vitals.TrySpendStamina(hand.CurrentHold.HoldDrainPerSecond * drainMultiplier))
             {
                 ReleaseHand(hand);
                 if (!LeftHand.HasHold && !RightHand.HasHold)
@@ -1017,6 +1061,11 @@ namespace Rise
             restFrozen = false;
             body.isKinematic = false;
             ResetFreeHandTargets();
+        }
+
+        public void ReportRestCompleted(RestPointType restType, Vector3 origin)
+        {
+            RestCompleted?.Invoke(restType, origin);
         }
 
         public void SetCheckpoint(Vector3 position)

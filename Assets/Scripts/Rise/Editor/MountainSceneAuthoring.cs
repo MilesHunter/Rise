@@ -878,21 +878,10 @@ namespace Rise.Editor
             playerObject.AddComponent<PlayerInventory>();
             playerObject.AddComponent<RestSessionController>();
             playerObject.AddComponent<CookingSystem>();
-            ToolController toolController = playerObject.AddComponent<ToolController>();
+            playerObject.AddComponent<ToolController>();
             PlayerClimbController controller = playerObject.AddComponent<PlayerClimbController>();
             playerObject.AddComponent<PlayerAudioBridge>();
             controller.Initialize(Camera.main, playerObject.transform.position, parent);
-
-            toolController.ToolPlaced += (toolKind, position) =>
-            {
-                AudioService service = AudioService.Instance;
-                if (service == null)
-                {
-                    return;
-                }
-
-                service.Play3D(toolKind == ToolKind.Anchor ? AudioCueId.AnchorPlace : AudioCueId.RopePlace, position);
-            };
 
             GameObject presentationObject = new GameObject("CharacterPresentation");
             presentationObject.transform.SetParent(playerObject.transform, false);

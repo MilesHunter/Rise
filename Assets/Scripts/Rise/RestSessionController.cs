@@ -8,6 +8,7 @@ namespace Rise
 
         private PlayerClimbController climb;
         private PlayerVitals vitals;
+        private CharacterPresentation presentation;
         private RestPoint activeRestPoint;
         private Camera sceneCamera;
         private Vector3 cameraBeforeRest;
@@ -22,6 +23,7 @@ namespace Rise
         {
             climb = GetComponent<PlayerClimbController>();
             vitals = GetComponent<PlayerVitals>();
+            presentation = GetComponentInChildren<CharacterPresentation>(true);
         }
 
         public void BeginRest(RestPoint restPoint)
@@ -34,6 +36,7 @@ namespace Rise
             activeRestPoint = restPoint;
             IsResting = true;
             climb.BeginRestFreeze(restPoint);
+            SetPresentationVisible(false);
             SaveAndMoveCamera(restPoint.transform.position);
         }
 
@@ -54,6 +57,7 @@ namespace Rise
                 climb.SetCheckpoint(transform.position);
             }
 
+            climb.ReportRestCompleted(activeRestPoint.RestType, activeRestPoint.transform.position);
             ExitRest();
         }
 
@@ -67,7 +71,21 @@ namespace Rise
             RestoreCamera();
             activeRestPoint = null;
             IsResting = false;
+            SetPresentationVisible(true);
             climb.EndRestFreeze();
+        }
+
+        private void SetPresentationVisible(bool visible)
+        {
+            if (presentation == null)
+            {
+                presentation = GetComponentInChildren<CharacterPresentation>(true);
+            }
+
+            if (presentation != null)
+            {
+                presentation.gameObject.SetActive(visible);
+            }
         }
 
         private void SaveAndMoveCamera(Vector3 restPosition)

@@ -139,21 +139,10 @@ namespace Rise
 
             playerObject.AddComponent<PlayerVitals>();
             playerObject.AddComponent<PlayerInventory>();
-            ToolController toolController = playerObject.AddComponent<ToolController>();
+            playerObject.AddComponent<ToolController>();
             PlayerClimbController controller = playerObject.AddComponent<PlayerClimbController>();
             playerObject.AddComponent<PlayerAudioBridge>();
             controller.Initialize(sceneCamera, new Vector3(-4.5f, 0.2f, 0f), parent);
-
-            toolController.ToolPlaced += (toolKind, position) =>
-            {
-                AudioService service = AudioService.Instance;
-                if (service == null)
-                {
-                    return;
-                }
-
-                service.Play3D(toolKind == ToolKind.Anchor ? AudioCueId.AnchorPlace : AudioCueId.RopePlace, position);
-            };
 
             return controller;
         }
