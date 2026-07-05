@@ -70,9 +70,20 @@ MonoBehaviour:
   visualPlaneZ: -0.18
   handMarkerSize: 0.18
   freeHandMarkerSize: 0.1
+  showHandDebugPoints: 1
+  debugHandPointSize: 0.16
+  debugTargetPointSize: 0.1
+  debugHoldPointSize: 0.22
+  debugLineWidth: 0.035
   idleHandColor: {r: 0.7, g: 0.72, b: 0.75, a: 0.85}
   reachingHandColor: {r: 1, g: 0.78, b: 0.2, a: 1}
   grippingHandColor: {r: 0.25, g: 1, b: 0.42, a: 1}
+  leftHandPointColor: {r: 0.05, g: 0.85, b: 1, a: 1}
+  leftTargetPointColor: {r: 0.1, g: 0.55, b: 1, a: 0.45}
+  leftHoldPointColor: {r: 0.65, g: 1, b: 1, a: 1}
+  rightHandPointColor: {r: 1, g: 0.45, b: 0.08, a: 1}
+  rightTargetPointColor: {r: 1, g: 0.35, b: 0.05, a: 0.45}
+  rightHoldPointColor: {r: 1, g: 0.82, b: 0.2, a: 1}
 --- !u!1 &2409231314766915952
 GameObject:
   m_ObjectHideFlags: 0
@@ -223,10 +234,10 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.35
-  m_Height: 1.9
+  m_Radius: 0.31529266
+  m_Height: 1.175986
   m_Direction: 1
-  m_Center: {x: 0, y: 0.95, z: 0}
+  m_Center: {x: 0, y: 1.8, z: 0}
 --- !u!54 &4264093450443544765
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -252,7 +263,7 @@ Rigidbody:
   m_UseGravity: 1
   m_IsKinematic: 0
   m_Interpolate: 1
-  m_Constraints: 0
+  m_Constraints: 56
   m_CollisionDetection: 0
 --- !u!114 &951846055515032360
 MonoBehaviour:
@@ -344,8 +355,11 @@ MonoBehaviour:
   holdSpringStrength: 55
   holdSpringDamping: 7
   mouseDeltaWorldScale: 0.015
-  bodyDriveReturnSpeed: 4
   maxBodyDriveOffset: 1.8
+  bodyDriveForceStrength: 45
+  bodyDriveDamping: 5
+  bodyDriveReturnSpeed: 4
+  maxHeldHandCorrection: 0.75
   movePlaneZ: 0
   kickForce: 7
   fallY: -4
@@ -353,8 +367,6 @@ MonoBehaviour:
   surfaceGrabTolerance: 0.9
   handReachLimit: 2.35
   freeHandReachWhenOtherHandHeld: 6
-  leftCursorHandOffset: {x: -0.48, y: 0.12, z: 0}
-  rightCursorHandOffset: {x: 0.48, y: 0.12, z: 0}
   leftFreeHandRestOffset: {x: -0.75, y: 0.25, z: 0}
   rightFreeHandRestOffset: {x: 0.75, y: 0.25, z: 0}
   leftFootSupportOffset: {x: -0.22, y: -0.95, z: 0}
