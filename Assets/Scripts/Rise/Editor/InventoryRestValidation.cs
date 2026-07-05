@@ -124,13 +124,14 @@ namespace Rise.Editor
                 serialized.FindProperty("passiveHungerDecayRange").vector2Value = new Vector2(1f, 1f);
                 serialized.FindProperty("passiveWarmthDecayRange").vector2Value = new Vector2(1f, 1f);
                 serialized.FindProperty("passiveSanityDecayRange").vector2Value = new Vector2(1f, 1f);
+                serialized.FindProperty("passiveDecayMultiplier").floatValue = 1.5f;
                 serialized.ApplyModifiedPropertiesWithoutUndo();
 
                 InvokePassiveDecayTick(vitals);
                 Require(vitals.Health == 100f, "passive decay should not reduce health");
-                Require(vitals.Hunger < 100f, "passive decay should reduce hunger");
-                Require(vitals.Warmth < 100f, "passive decay should reduce warmth");
-                Require(vitals.Sanity < 100f, "passive decay should reduce sanity");
+                Require(Mathf.Approximately(vitals.Hunger, 98.5f), "passive decay multiplier should reduce hunger by 50% more");
+                Require(Mathf.Approximately(vitals.Warmth, 98.5f), "passive decay multiplier should reduce warmth by 50% more");
+                Require(Mathf.Approximately(vitals.Sanity, 98.5f), "passive decay multiplier should reduce sanity by 50% more");
             }
             finally
             {

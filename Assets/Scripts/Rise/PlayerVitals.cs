@@ -19,6 +19,7 @@ namespace Rise
         [SerializeField] private Vector2 passiveHungerDecayRange = new Vector2(0.4f, 0.9f);
         [SerializeField] private Vector2 passiveWarmthDecayRange = new Vector2(0.15f, 0.45f);
         [SerializeField] private Vector2 passiveSanityDecayRange = new Vector2(0.08f, 0.28f);
+        [SerializeField] private float passiveDecayMultiplier = 1.5f;
 
         public event Action Changed;
         private RestSessionController restSession;
@@ -208,9 +209,10 @@ namespace Rise
         private void ApplyPassiveDecayTick()
         {
             passiveDecayTimer = 0f;
-            hunger = ClampVital(hunger - UnityEngine.Random.Range(passiveHungerDecayRange.x, passiveHungerDecayRange.y));
-            warmth = ClampVital(warmth - UnityEngine.Random.Range(passiveWarmthDecayRange.x, passiveWarmthDecayRange.y));
-            sanity = ClampVital(sanity - UnityEngine.Random.Range(passiveSanityDecayRange.x, passiveSanityDecayRange.y));
+            float decayMultiplier = Mathf.Max(0f, passiveDecayMultiplier);
+            hunger = ClampVital(hunger - UnityEngine.Random.Range(passiveHungerDecayRange.x, passiveHungerDecayRange.y) * decayMultiplier);
+            warmth = ClampVital(warmth - UnityEngine.Random.Range(passiveWarmthDecayRange.x, passiveWarmthDecayRange.y) * decayMultiplier);
+            sanity = ClampVital(sanity - UnityEngine.Random.Range(passiveSanityDecayRange.x, passiveSanityDecayRange.y) * decayMultiplier);
             ScheduleNextPassiveDecay();
             Changed?.Invoke();
         }
