@@ -18,7 +18,7 @@ namespace Rise
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
         private static void EnsureOnLoadedPlayer()
         {
-            PlayerClimbController climb = FindFirstObjectByType<PlayerClimbController>();
+            PlayerClimbController climb = FindAnyObjectByType<PlayerClimbController>();
             if (climb != null && climb.GetComponent<PlayerDebugHotkeys>() == null)
             {
                 climb.gameObject.AddComponent<PlayerDebugHotkeys>();
@@ -76,7 +76,7 @@ namespace Rise
 
         private RestPoint FindNearestRestPoint()
         {
-            RestPoint[] restPoints = FindObjectsByType<RestPoint>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+            RestPoint[] restPoints = FindObjectsByType<RestPoint>(FindObjectsInactive.Exclude);
             RestPoint nearest = null;
             float nearestDistance = float.PositiveInfinity;
             Vector3 origin = transform.position;
