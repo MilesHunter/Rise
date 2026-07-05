@@ -50,6 +50,8 @@ MonoBehaviour:
   visualRoot: {fileID: 2114552044893985535}
   hips: {fileID: 2323419711691539559}
   chest: {fileID: 1763002874574636648}
+  neck: {fileID: 0}
+  head: {fileID: 0}
   leftUpperArm: {fileID: 2824962427574347694}
   leftLowerArm: {fileID: 1960062610205590426}
   leftHandBone: {fileID: 8023423491410592904}
@@ -68,6 +70,12 @@ MonoBehaviour:
   modelScale: 0.65
   poseBlendSpeed: 9
   visualPlaneZ: -0.18
+  climbHipCurl: -1.5
+  climbChestCurl: -2.5
+  maxTorsoSideLean: 10
+  maxChestReachTwist: 0.75
+  preventInvertedPosture: 1
+  minHeadAboveHips: 0.1
   handMarkerSize: 0.18
   freeHandMarkerSize: 0.1
   showHandDebugPoints: 1
@@ -282,6 +290,11 @@ MonoBehaviour:
   warmth: 100
   sanity: 100
   health: 100
+  passiveDecayIntervalRange: {x: 8, y: 14}
+  passiveHungerDecayRange: {x: 0.4, y: 0.9}
+  passiveWarmthDecayRange: {x: 0.15, y: 0.45}
+  passiveSanityDecayRange: {x: 0.08, y: 0.28}
+  passiveDecayMultiplier: 1.5
 --- !u!114 &1147734482440138488
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -310,6 +323,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::Rise.RestSessionController
   restCameraYOffset: 1.5
+  enterCameraDuration: 0.6
+  exitCameraDuration: 0.4
 --- !u!114 &4451982356574521984
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -336,9 +351,9 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::Rise.ToolController
   selectedTool: 0
   toolMode: 0
-  ropeRange: 5
-  ropeVisualSegments: 18
-  ropeSag: 0.45
+  ropeRange: 60
+  ropeLength: 15
+  ropeSegmentCount: 12
 --- !u!114 &1502917893274282916
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -359,7 +374,7 @@ MonoBehaviour:
   bodyDriveForceStrength: 45
   bodyDriveDamping: 5
   bodyDriveReturnSpeed: 4
-  maxHeldHandCorrection: 0.75
+  heldHandReachSlack: 0.03
   movePlaneZ: 0
   kickForce: 7
   fallY: -4
@@ -377,6 +392,16 @@ MonoBehaviour:
   footSupportSpringStrength: 75
   footSupportDamping: 11
   maxFootSupportAcceleration: 28
+  climbExposureTickInterval: 10
+  highAltitudeY: 45
+  lowSanityAimJitter: 0.12
+  freeHandsStaminaRecoveryDelay: 3
+  freeHandsStaminaRecoveryPerSecond: 2
+  ropeHandFeedbackStrength: 0.35
+  capsuleHeight: 1.9
+  capsuleRadius: 0.35
+  capsuleCenter: {x: 0, y: 0.95, z: 0}
+  centerOfMass: {x: 0, y: 0.85, z: 0}
 --- !u!114 &2356350099827991809
 MonoBehaviour:
   m_ObjectHideFlags: 0
