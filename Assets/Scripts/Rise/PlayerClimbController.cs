@@ -1,5 +1,6 @@
 using System.Collections;
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
 using Random = UnityEngine.Random;
@@ -32,6 +33,7 @@ namespace Rise
         [SerializeField] private float surfaceGrabTolerance = 0.9f;
         [SerializeField] private float handReachLimit = 3.25f;
         [SerializeField] private float freeHandReachWhenOtherHandHeld = 6f;
+        [SerializeField] private float maxHeldHandCorrectionPerSecond = 4f;
         [SerializeField] private Vector3 leftFreeHandRestOffset = new Vector3(-0.75f, 0.25f, 0f);
         [SerializeField] private Vector3 rightFreeHandRestOffset = new Vector3(0.75f, 0.25f, 0f);
         [SerializeField] private Vector3 leftFootSupportOffset = new Vector3(-0.22f, -0.95f, 0f);
@@ -69,6 +71,8 @@ namespace Rise
         private RestSessionController restSession;
         private float climbExposureTimer;
         private float freeHandsTimer;
+        private CapsuleCollider bodyCollider;
+        private readonly List<Collider> ignoredUpwardClimbColliders = new List<Collider>();
 
         public HandState LeftHand { get; } = new HandState { DisplayName = "Left", IsLeft = true, LocalAnchorOffset = new Vector3(-0.45f, 0.55f, 0f) };
         public HandState RightHand { get; } = new HandState { DisplayName = "Right", IsLeft = false, LocalAnchorOffset = new Vector3(0.45f, 0.55f, 0f) };
@@ -122,6 +126,7 @@ namespace Rise
 
         private void OnDisable()
         {
+            SetUpwardClimbCollisionBypass(false);
             SetCursorLock(false);
         }
 
@@ -157,6 +162,7 @@ namespace Rise
         private void FixedUpdate()
         {
             ConstrainToPlane();
+            UpdateUpwardClimbCollisionBypass();
             ApplyHoldForce(LeftHand);
             ApplyHoldForce(RightHand);
             ApplyBodyDrive();
@@ -369,7 +375,7 @@ namespace Rise
             }
 
             Vector3 anchor = transform.position + hand.LocalAnchorOffset;
-            if (Vector3.Distance(anchor, targetHold.Position) > GetHoldReach(hand))
+            if (Vector3.Distance(anchor, targetHold.Position) > GetGrabReach(hand))
             {
                 hand.State = HandGrabState.Reach;
                 ReleaseRuntimeHoldIfNeeded(surfaceGrip);
@@ -663,11 +669,76 @@ namespace Rise
 
             if ((position - body.position).sqrMagnitude > 0.000001f)
             {
-                body.position = position;
+                float maxCorrection = Mathf.Max(0.01f, maxHeldHandCorrectionPerSecond) * Time.fixedDeltaTime;
+                Vector3 correctedPosition = Vector3.MoveTowards(body.position, position, maxCorrection);
+                correctedPosition.z = movePlaneZ;
+                body.MovePosition(correctedPosition);
             }
 
             body.linearVelocity = RemoveOutwardVelocityAtHeldLimit(LeftHand, body.linearVelocity);
             body.linearVelocity = RemoveOutwardVelocityAtHeldLimit(RightHand, body.linearVelocity);
+        }
+
+        private void UpdateUpwardClimbCollisionBypass()
+        {
+            bool shouldBypass = ShouldBypassClimbSurfaceCollision();
+            SetUpwardClimbCollisionBypass(shouldBypass);
+        }
+
+        private bool ShouldBypassClimbSurfaceCollision()
+        {
+            if (bodyCollider == null || body == null || body.isKinematic || IsRestLocked || hasWon)
+            {
+                return false;
+            }
+
+            if (!LeftHand.HasHold && !RightHand.HasHold)
+            {
+                return false;
+            }
+
+            return body.linearVelocity.y > 0.05f || bodyDriveOffset.y > 0.05f;
+        }
+
+        private void SetUpwardClimbCollisionBypass(bool active)
+        {
+            if (bodyCollider == null)
+            {
+                return;
+            }
+
+            for (int i = ignoredUpwardClimbColliders.Count - 1; i >= 0; i--)
+            {
+                Collider ignored = ignoredUpwardClimbColliders[i];
+                if (ignored == null)
+                {
+                    ignoredUpwardClimbColliders.RemoveAt(i);
+                    continue;
+                }
+
+                if (!active || !ignored.enabled)
+                {
+                    Physics.IgnoreCollision(bodyCollider, ignored, false);
+                    ignoredUpwardClimbColliders.RemoveAt(i);
+                }
+            }
+
+            if (!active)
+            {
+                return;
+            }
+
+            foreach (ClimbSurface surface in ClimbSurface.ActiveSurfaces)
+            {
+                Collider surfaceCollider = surface != null ? surface.SurfaceCollider : null;
+                if (surfaceCollider == null || !surfaceCollider.enabled || surfaceCollider == bodyCollider || ignoredUpwardClimbColliders.Contains(surfaceCollider))
+                {
+                    continue;
+                }
+
+                Physics.IgnoreCollision(bodyCollider, surfaceCollider, true);
+                ignoredUpwardClimbColliders.Add(surfaceCollider);
+            }
         }
 
         private Vector3 ProjectBodyInsideHeldHandReach(HandState hand, Vector3 bodyPosition)
@@ -1179,6 +1250,11 @@ namespace Rise
             return Mathf.Max(holdReach, GetReachLimit(hand));
         }
 
+        private float GetGrabReach(HandState hand)
+        {
+            return Mathf.Max(holdReach, handReachLimit);
+        }
+
         private Vector3 GetHandGrabProbeWorld(HandState hand)
         {
             Vector3 probe = hand.WorldTarget;
@@ -1274,13 +1350,13 @@ namespace Rise
 
         private void NormalizePhysicsBody()
         {
-            CapsuleCollider capsule = GetComponent<CapsuleCollider>();
-            if (capsule != null)
+            bodyCollider = GetComponent<CapsuleCollider>();
+            if (bodyCollider != null)
             {
-                capsule.direction = 1;
-                capsule.height = capsuleHeight;
-                capsule.radius = capsuleRadius;
-                capsule.center = capsuleCenter;
+                bodyCollider.direction = 1;
+                bodyCollider.height = capsuleHeight;
+                bodyCollider.radius = capsuleRadius;
+                bodyCollider.center = capsuleCenter;
             }
 
             if (body != null)

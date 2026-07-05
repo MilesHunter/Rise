@@ -34,6 +34,7 @@ namespace Rise
         public float SlipChance => slipChance;
         public bool AllowAnchorAttach => allowAnchorAttach;
         public bool AllowRopeAttach => allowRopeAttach;
+        public Collider SurfaceCollider => GetCollider();
 
         public void Configure(string label, float initialGrabCost, float drainPerSecond, float interval, float chanceToSlip, bool canAnchor, bool canRope)
         {

@@ -370,12 +370,12 @@ namespace Rise
             float climbBend = Mathf.Lerp(7f, 12f, climbPose);
             float kickLift = kick * -54f;
             float kickSplay = kick * side * -24f;
-            upperLeg.localRotation = upperInitial * Quaternion.Euler(kickLift - climbBend, 0f, naturalSwing + side * 10f * climbPose + kickSplay);
+            upperLeg.localRotation = upperInitial * Quaternion.Euler(kickLift - climbBend, 0f, naturalSwing + kickSplay);
 
             if (lowerLeg != null)
             {
                 float lowerSwing = Mathf.Sin(Time.time * 3.2f + (left ? Mathf.PI : 0f)) * 1.8f * climbPose;
-                lowerLeg.localRotation = lowerInitial * Quaternion.Euler(Mathf.Lerp(0f, 14f, climbPose) + kick * 48f, 0f, lowerSwing + side * -4f * climbPose);
+                lowerLeg.localRotation = lowerInitial * Quaternion.Euler(Mathf.Lerp(0f, 14f, climbPose) + kick * 48f, 0f, lowerSwing);
             }
         }
 
