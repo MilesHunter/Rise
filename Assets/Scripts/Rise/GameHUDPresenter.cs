@@ -21,6 +21,14 @@ namespace Rise
         private Text statusText;
         private Text controlsText;
         private Text summitText;
+        private RectTransform statusOverlayRect;
+        private Image healthOverlay;
+        private Image hungerOverlay;
+        private Image warmthOverlay;
+        private Image sanityOverlay;
+        private GameObject resourceSearchPanel;
+        private Image resourceSearchFill;
+        private Text resourceSearchText;
         private ResourceIconDisplay healthDisplay;
         private ResourceIconDisplay hungerDisplay;
         private ResourceIconDisplay warmthDisplay;
@@ -73,6 +81,9 @@ namespace Rise
             if (staminaValueText != null)
             {
                 staminaValueText.text = staminaValue;
+                staminaValueText.color = vitals.LowStamina
+                    ? Color.Lerp(new Color(1f, 0.18f, 0.12f, 1f), new Color(1f, 0.85f, 0.24f, 1f), Mathf.PingPong(Time.unscaledTime * 6f, 1f))
+                    : Color.white;
             }
 
             if (toolText != null)
@@ -87,7 +98,7 @@ namespace Rise
 
             if (statusText != null)
             {
-                statusText.text = $"Load {inventory.WeightClass} {inventory.TotalWeight:0.#}";
+                statusText.text = BuildStatusSummary();
             }
 
             if (controlsText != null)
@@ -95,10 +106,12 @@ namespace Rise
                 controlsText.text = "Mouse aim  LMB/RMB hands  Q/E kick  W tool  Wheel switch  I pack  F rest/tool place";
             }
 
-            healthDisplay?.UpdateValue(vitals.Health);
-            hungerDisplay?.UpdateValue(vitals.Hunger);
-            warmthDisplay?.UpdateValue(vitals.Warmth);
-            sanityDisplay?.UpdateValue(vitals.Sanity);
+            healthDisplay?.UpdateValue(vitals.Health, vitals.WarningHealth, vitals.LowHealth);
+            hungerDisplay?.UpdateValue(vitals.Hunger, vitals.WarningHunger, vitals.LowHunger);
+            warmthDisplay?.UpdateValue(vitals.Warmth, vitals.WarningWarmth, vitals.LowWarmth);
+            sanityDisplay?.UpdateValue(vitals.Sanity, vitals.WarningSanity, vitals.LowSanity);
+            UpdateStatusOverlays();
+            UpdateResourceSearchPanel();
 
             if (summitText != null)
             {
@@ -122,6 +135,7 @@ namespace Rise
             if (transform.childCount > 0)
             {
                 BindSceneHud(font);
+                EnsureStatusOverlay();
                 built = true;
                 return;
             }
@@ -144,6 +158,8 @@ namespace Rise
             statusText = CreateText("StatusText", rootPanel.transform, font, 12, new Vector2(14f, -96f), new Vector2(310f, 18f));
 
             BuildResourceIconPanel(font);
+            EnsureResourceSearchPanel(font);
+            EnsureStatusOverlay();
             controlsText = CreateText("Controls", transform, font, 14, new Vector2(16f, 108f), new Vector2(620f, 22f), new Vector2(0f, 0f), new Vector2(0f, 0f));
             summitText = CreateText("SummitText", transform, font, 34, new Vector2(-170f, -35f), new Vector2(340f, 70f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f));
             summitText.alignment = TextAnchor.MiddleCenter;
@@ -178,6 +194,188 @@ namespace Rise
             hungerDisplay = BindResourceDisplay(resources, "Hunger", HungerIconGuid);
             warmthDisplay = BindResourceDisplay(resources, "Warmth", WarmthIconGuid);
             sanityDisplay = BindResourceDisplay(resources, "Sanity", SanityIconGuid);
+            BindStatusOverlay();
+            EnsureResourceSearchPanel(font);
+        }
+
+        private void EnsureStatusOverlay()
+        {
+            Transform overlay = transform.Find("StatusOverlay");
+            if (overlay == null)
+            {
+                GameObject overlayObject = new GameObject("StatusOverlay", typeof(RectTransform));
+                overlayObject.transform.SetParent(transform, false);
+                ConfigureFullScreenRect(overlayObject.GetComponent<RectTransform>());
+                overlay = overlayObject.transform;
+            }
+
+            overlay.SetAsFirstSibling();
+            statusOverlayRect = overlay.GetComponent<RectTransform>();
+            healthOverlay = FindOrCreateOverlayImage(overlay, "HealthOverlay", new Color(0.75f, 0f, 0f, 0f));
+            hungerOverlay = FindOrCreateOverlayImage(overlay, "HungerOverlay", new Color(0.65f, 0.42f, 0.05f, 0f));
+            warmthOverlay = FindOrCreateOverlayImage(overlay, "WarmthOverlay", new Color(0.05f, 0.35f, 1f, 0f));
+            sanityOverlay = FindOrCreateOverlayImage(overlay, "SanityOverlay", new Color(0.35f, 0f, 0.55f, 0f));
+        }
+
+        private void BindStatusOverlay()
+        {
+            Transform overlay = transform.Find("StatusOverlay");
+            if (overlay == null)
+            {
+                return;
+            }
+
+            statusOverlayRect = overlay.GetComponent<RectTransform>();
+            Transform health = overlay.Find("HealthOverlay");
+            Transform hunger = overlay.Find("HungerOverlay");
+            Transform warmth = overlay.Find("WarmthOverlay");
+            Transform sanity = overlay.Find("SanityOverlay");
+            healthOverlay = health != null ? health.GetComponent<Image>() : null;
+            hungerOverlay = hunger != null ? hunger.GetComponent<Image>() : null;
+            warmthOverlay = warmth != null ? warmth.GetComponent<Image>() : null;
+            sanityOverlay = sanity != null ? sanity.GetComponent<Image>() : null;
+        }
+
+        private void UpdateStatusOverlays()
+        {
+            SetOverlayAlpha(healthOverlay, new Color(0.85f, 0f, 0f, 1f), vitals.LowHealth ? 0.18f : vitals.WarningHealth ? 0.07f : 0f, 4.5f);
+            SetOverlayAlpha(hungerOverlay, new Color(0.62f, 0.40f, 0.05f, 1f), vitals.LowHunger ? 0.13f : vitals.WarningHunger ? 0.05f : 0f, 3.2f);
+            SetOverlayAlpha(warmthOverlay, new Color(0.05f, 0.38f, 1f, 1f), vitals.LowWarmth ? 0.14f : vitals.WarningWarmth ? 0.05f : 0f, 2.8f);
+            SetOverlayAlpha(sanityOverlay, new Color(0.34f, 0f, 0.55f, 1f), vitals.LowSanity ? 0.12f : vitals.WarningSanity ? 0.04f : 0f, 6f);
+            UpdateStatusOverlayShake();
+        }
+
+        private void UpdateStatusOverlayShake()
+        {
+            if (statusOverlayRect == null)
+            {
+                return;
+            }
+
+            float strength = 0f;
+            if (vitals.LowHealth) strength += 0.9f;
+            if (vitals.LowHunger) strength += 0.45f;
+            if (vitals.LowWarmth) strength += 0.65f;
+            if (vitals.LowSanity) strength += 1.1f;
+
+            if (strength <= 0f)
+            {
+                statusOverlayRect.anchoredPosition = Vector2.zero;
+                return;
+            }
+
+            float x = Mathf.PerlinNoise(Time.unscaledTime * 18f, 2.7f) - 0.5f;
+            float y = Mathf.PerlinNoise(7.4f, Time.unscaledTime * 18f) - 0.5f;
+            statusOverlayRect.anchoredPosition = new Vector2(x, y) * Mathf.Min(strength, 2.2f);
+        }
+
+        private string BuildStatusSummary()
+        {
+            string text = $"Load {inventory.WeightClass} {inventory.TotalWeight:0.#}";
+            if (vitals.LowHealth) text += "  injured";
+            else if (vitals.WarningHealth) text += "  hurt";
+
+            if (vitals.LowHunger) text += "  starving";
+            else if (vitals.WarningHunger) text += "  hungry";
+
+            if (vitals.LowWarmth) text += "  freezing";
+            else if (vitals.WarningWarmth) text += "  cold";
+
+            if (vitals.LowSanity) text += "  shaken";
+            else if (vitals.WarningSanity) text += "  uneasy";
+
+            return text;
+        }
+
+        private void EnsureResourceSearchPanel(Font font)
+        {
+            Transform existing = transform.Find("ResourceSearchPanel");
+            if (existing == null)
+            {
+                Image panel = CreatePanel("ResourceSearchPanel", transform, new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(16f, 148f), new Vector2(250f, 54f));
+                panel.color = new Color(0.035f, 0.045f, 0.05f, 0.78f);
+                panel.raycastTarget = false;
+                panel.rectTransform.pivot = new Vector2(0f, 1f);
+
+                Image background = CreatePanel("ProgressBg", panel.transform, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(10f, -38f), new Vector2(230f, 8f));
+                background.color = new Color(0f, 0f, 0f, 0.45f);
+                background.raycastTarget = false;
+
+                resourceSearchFill = CreatePanel("ProgressFill", background.transform, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+                resourceSearchFill.type = Image.Type.Filled;
+                resourceSearchFill.fillMethod = Image.FillMethod.Horizontal;
+                resourceSearchFill.color = new Color(0.42f, 0.82f, 0.62f, 0.95f);
+                resourceSearchFill.raycastTarget = false;
+
+                resourceSearchText = CreateText("Label", panel.transform, font, 12, new Vector2(10f, -5f), new Vector2(230f, 32f));
+                resourceSearchText.raycastTarget = false;
+                resourceSearchPanel = panel.gameObject;
+                resourceSearchPanel.SetActive(false);
+                return;
+            }
+
+            resourceSearchPanel = existing.gameObject;
+            Transform progressBackground = existing.Find("ProgressBg");
+            Transform progressFill = progressBackground != null ? progressBackground.Find("ProgressFill") : existing.Find("ProgressFill");
+            resourceSearchFill = progressFill != null ? progressFill.GetComponent<Image>() : null;
+            resourceSearchText = FindText(existing, "Label");
+
+            if (resourceSearchFill == null && progressBackground != null)
+            {
+                resourceSearchFill = CreatePanel("ProgressFill", progressBackground, Vector2.zero, Vector2.one, Vector2.zero, Vector2.zero);
+                resourceSearchFill.type = Image.Type.Filled;
+                resourceSearchFill.fillMethod = Image.FillMethod.Horizontal;
+                resourceSearchFill.color = new Color(0.42f, 0.82f, 0.62f, 0.95f);
+            }
+
+            if (resourceSearchText == null)
+            {
+                resourceSearchText = CreateText("Label", existing, font, 13, new Vector2(10f, -5f), new Vector2(230f, 18f));
+            }
+
+            resourceSearchPanel.SetActive(false);
+        }
+
+        private void UpdateResourceSearchPanel()
+        {
+            if (resourceSearchPanel == null)
+            {
+                return;
+            }
+
+            ResourceNode node = controller != null ? controller.CurrentResourceNode : null;
+            bool visible = node != null;
+            resourceSearchPanel.SetActive(visible);
+            if (!visible)
+            {
+                return;
+            }
+
+            if (resourceSearchFill != null)
+            {
+                resourceSearchFill.fillAmount = node.SearchProgress01;
+                resourceSearchFill.color = node.RevealedCount > 0
+                    ? new Color(0.95f, 0.78f, 0.28f, 0.95f)
+                    : new Color(0.42f, 0.82f, 0.62f, 0.95f);
+            }
+
+            if (resourceSearchText != null)
+            {
+                string suffix = node.RevealedCount > 0 ? "  F take" : node.IsSearching ? string.Empty : "  F search";
+                resourceSearchText.text = $"{node.SearchLabel}{suffix}\n{node.BuildSlotSummary()}";
+            }
+        }
+
+        private static void SetOverlayAlpha(Image image, Color baseColor, float maxAlpha, float pulseSpeed)
+        {
+            if (image == null)
+            {
+                return;
+            }
+
+            float pulse = maxAlpha > 0f ? Mathf.Lerp(0.55f, 1f, Mathf.PingPong(Time.unscaledTime * pulseSpeed, 1f)) : 0f;
+            baseColor.a = maxAlpha * pulse;
+            image.color = baseColor;
         }
 
         private void BuildResourceIconPanel(Font font)
@@ -257,6 +455,40 @@ namespace Rise
             image.preserveAspect = true;
             image.color = Color.white;
             return image;
+        }
+
+        private static Image FindOrCreateOverlayImage(Transform parent, string name, Color color)
+        {
+            Transform existing = parent.Find(name);
+            Image image;
+            if (existing != null)
+            {
+                image = existing.GetComponent<Image>();
+                if (image == null)
+                {
+                    image = existing.gameObject.AddComponent<Image>();
+                }
+            }
+            else
+            {
+                GameObject imageObject = new GameObject(name, typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+                imageObject.transform.SetParent(parent, false);
+                ConfigureFullScreenRect(imageObject.GetComponent<RectTransform>());
+                image = imageObject.GetComponent<Image>();
+            }
+
+            image.raycastTarget = false;
+            image.color = color;
+            return image;
+        }
+
+        private static void ConfigureFullScreenRect(RectTransform rect)
+        {
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.pivot = new Vector2(0.5f, 0.5f);
+            rect.anchoredPosition = Vector2.zero;
+            rect.sizeDelta = Vector2.zero;
         }
 
         private static Sprite[] LoadSpriteFramesByGuid(string assetGuid)
@@ -352,9 +584,23 @@ namespace Rise
                 this.frames = frames ?? System.Array.Empty<Sprite>();
             }
 
-            public void UpdateValue(float value)
+            public void UpdateValue(float value, bool warning, bool low)
             {
                 valueText.text = Mathf.CeilToInt(value).ToString();
+                Color targetColor = Color.white;
+                if (low)
+                {
+                    float pulse = Mathf.PingPong(Time.unscaledTime * 5f, 1f);
+                    targetColor = Color.Lerp(new Color(1f, 0.18f, 0.12f, 1f), new Color(1f, 0.78f, 0.2f, 1f), pulse);
+                }
+                else if (warning)
+                {
+                    targetColor = new Color(1f, 0.82f, 0.28f, 1f);
+                }
+
+                icon.color = targetColor;
+                valueText.color = targetColor;
+
                 if (frames.Length == 0)
                 {
                     return;

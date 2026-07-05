@@ -20,6 +20,12 @@ namespace Rise
         WindLoop,
         BreathingLightLoop,
         BreathingHeavyLoop,
-        CampfireLoop
+        CampfireLoop,
+        ResourceSearchStart,
+        ResourceFound,
+        ResourceTake,
+        ItemUse,
+        CookSuccess,
+        CookFail
     }
 }

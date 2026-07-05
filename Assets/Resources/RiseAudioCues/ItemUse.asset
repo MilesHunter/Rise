@@ -1,0 +1,28 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 6ad420a793a0be043ad5982a688a4592, type: 3}
+  m_Name: ItemUse
+  m_EditorClassIdentifier: Assembly-CSharp::Rise.AudioCue
+  cueId: 22
+  clips:
+  - {fileID: 8300000, guid: a59b02d2fb43d9444bbbb214cb953bbc, type: 3}
+  - {fileID: 8300000, guid: 87469a1de9930004e963627f7ce30c0e, type: 3}
+  - {fileID: 8300000, guid: 38aa806e1ce87564b915d14cbab872d0, type: 3}
+  loop: 0
+  spatialized: 1
+  baseVolume: 0.38
+  randomVolumeRange: {x: 0.9, y: 1}
+  randomPitchRange: {x: 1, y: 1.12}
+  minDistance: 2
+  maxDistance: 12
+  priority: 120
+  cooldown: 0.12

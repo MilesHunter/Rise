@@ -13,6 +13,9 @@ namespace Rise
     [RequireComponent(typeof(PlayerInventory))]
     public sealed class PlayerClimbController : MonoBehaviour
     {
+        private const float DefaultFreeHandsStaminaRecoveryDelay = 3f;
+        private const float DefaultFreeHandsStaminaRecoveryPerSecond = 2f;
+
         [SerializeField] private float holdReach = 3.25f;
         [SerializeField] private float holdSpringStrength = 55f;
         [SerializeField] private float holdSpringDamping = 7f;
@@ -36,6 +39,11 @@ namespace Rise
         [SerializeField] private float footSupportSpringStrength = 75f;
         [SerializeField] private float footSupportDamping = 11f;
         [SerializeField] private float maxFootSupportAcceleration = 28f;
+        [SerializeField] private float climbExposureTickInterval = 10f;
+        [SerializeField] private float highAltitudeY = 45f;
+        [SerializeField] private float lowSanityAimJitter = 0.12f;
+        [SerializeField] private float freeHandsStaminaRecoveryDelay = DefaultFreeHandsStaminaRecoveryDelay;
+        [SerializeField] private float freeHandsStaminaRecoveryPerSecond = DefaultFreeHandsStaminaRecoveryPerSecond;
 
         private Rigidbody body;
         private Camera mainCamera;
@@ -51,6 +59,8 @@ namespace Rise
         private AudioCueId activeBreathingCue;
         private bool cursorLocked;
         private RestSessionController restSession;
+        private float climbExposureTimer;
+        private float freeHandsTimer;
 
         public HandState LeftHand { get; } = new HandState { DisplayName = "Left", IsLeft = true, LocalAnchorOffset = new Vector3(-0.45f, 0.55f, 0f) };
         public HandState RightHand { get; } = new HandState { DisplayName = "Right", IsLeft = false, LocalAnchorOffset = new Vector3(0.45f, 0.55f, 0f) };
@@ -61,6 +71,7 @@ namespace Rise
         public Vector3 CursorWorld { get; private set; }
         public Vector3 BodyVelocity => body != null ? body.linearVelocity : Vector3.zero;
         public bool HasWon => hasWon;
+        public ResourceNode CurrentResourceNode => currentResourceNode;
         public float LeftKickVisual { get; private set; }
         public float RightKickVisual { get; private set; }
         public float HandReachLimit => handReachLimit;
@@ -74,6 +85,9 @@ namespace Rise
         public event Action<Vector3> Respawned;
         public event Action<Vector3> GoalReached;
         public event Action<AudioCueId> BreathingStateChanged;
+        public event Action<ResourceNode, Vector3> ResourceSearchStarted;
+        public event Action<ResourceNode, string, int, Vector3> ResourceItemFound;
+        public event Action<ResourceNode, string, int, Vector3> ResourceItemTaken;
 
         public void Initialize(Camera sceneCamera, Vector3 spawnPoint, Transform generatedRoot)
         {
@@ -111,6 +125,7 @@ namespace Rise
         private void Update()
         {
             UpdateCursorWorld();
+            UpdateFreeHandsStaminaRecovery(Time.deltaTime);
             if (restFrozen)
             {
                 UpdateBreathingState();
@@ -125,6 +140,7 @@ namespace Rise
             UpdateResourceInput();
             UpdateRestInput();
             UpdatePrompt();
+            UpdateClimbExposure();
             DecayKickVisuals();
             UpdateBreathingState();
             Tools.UpdateRuntime();
@@ -154,7 +170,14 @@ namespace Rise
 
             if (other.TryGetComponent(out ResourceNode resourceNode))
             {
+                if (currentResourceNode != null && currentResourceNode != resourceNode)
+                {
+                    currentResourceNode.ItemRevealed -= OnResourceItemRevealed;
+                }
+
                 currentResourceNode = resourceNode;
+                currentResourceNode.ItemRevealed -= OnResourceItemRevealed;
+                currentResourceNode.ItemRevealed += OnResourceItemRevealed;
             }
 
             if (other.TryGetComponent(out GoalPoint goalPoint))
@@ -175,6 +198,7 @@ namespace Rise
 
             if (other.TryGetComponent(out ResourceNode resourceNode) && currentResourceNode == resourceNode)
             {
+                currentResourceNode.ItemRevealed -= OnResourceItemRevealed;
                 currentResourceNode = null;
             }
 
@@ -347,7 +371,7 @@ namespace Rise
                 return;
             }
 
-            float grabCost = targetHold.InitialGrabCost;
+            float grabCost = targetHold.InitialGrabCost * Vitals.GrabCostMultiplier;
             if (!Vitals.TrySpendStamina(grabCost))
             {
                 ReleaseRuntimeHoldIfNeeded(surfaceGrip);
@@ -408,7 +432,7 @@ namespace Rise
 
             if (Keyboard.current.qKey.wasPressedThisFrame && Vitals.TrySpendStamina(4f))
             {
-                float multiplier = Inventory != null ? Inventory.KickForceMultiplier : 1f;
+                float multiplier = (Inventory != null ? Inventory.KickForceMultiplier : 1f) * Vitals.KickForceMultiplier;
                 body.AddForce(new Vector3(-1.2f, 2.5f, 0f).normalized * kickForce * multiplier, ForceMode.Impulse);
                 LeftKickVisual = 1f;
                 KickPerformed?.Invoke(true, transform.position + new Vector3(-0.35f, 0.25f, 0f));
@@ -416,7 +440,7 @@ namespace Rise
 
             if (Keyboard.current.eKey.wasPressedThisFrame && Vitals.TrySpendStamina(4f))
             {
-                float multiplier = Inventory != null ? Inventory.KickForceMultiplier : 1f;
+                float multiplier = (Inventory != null ? Inventory.KickForceMultiplier : 1f) * Vitals.KickForceMultiplier;
                 body.AddForce(new Vector3(1.2f, 2.5f, 0f).normalized * kickForce * multiplier, ForceMode.Impulse);
                 RightKickVisual = 1f;
                 KickPerformed?.Invoke(false, transform.position + new Vector3(0.35f, 0.25f, 0f));
@@ -437,13 +461,27 @@ namespace Rise
 
             if (currentResourceNode.RevealedCount > 0)
             {
-                bool taken = currentResourceNode.TryTakeRevealed(Inventory, 0);
-                CurrentPrompt = taken ? currentResourceNode.BuildStatusText() : "Small pack full";
+                currentResourceNode.TryGetRevealed(0, out string takenItemId, out int takenQuantity);
+                bool allowLargeFallback = currentRestPoint != null && currentRestPoint.RestType == RestPointType.LongRest;
+                bool taken = currentResourceNode.TryTakeRevealed(Inventory, 0, allowLargeFallback);
+                CurrentPrompt = taken
+                    ? currentResourceNode.BuildStatusText()
+                    : allowLargeFallback ? "Packs full" : "Small pack full. Organize at a long rest";
+                if (taken)
+                {
+                    ResourceItemTaken?.Invoke(currentResourceNode, takenItemId, takenQuantity, currentResourceNode.transform.position);
+                }
                 return;
             }
 
             currentResourceNode.StartSearch(this);
             CurrentPrompt = currentResourceNode.BuildStatusText();
+            ResourceSearchStarted?.Invoke(currentResourceNode, currentResourceNode.transform.position);
+        }
+
+        private void OnResourceItemRevealed(ResourceNode node, string itemId, int quantity, Vector3 origin)
+        {
+            ResourceItemFound?.Invoke(node, itemId, quantity, origin);
         }
 
         private void UpdateRestInput()
@@ -555,7 +593,7 @@ namespace Rise
             }
 
             hand.HoldDrainTimer -= 1f;
-            float drainMultiplier = Inventory != null ? Inventory.HoldDrainMultiplier : 1f;
+            float drainMultiplier = (Inventory != null ? Inventory.HoldDrainMultiplier : 1f) * Vitals.HoldDrainMultiplier;
             if (!Vitals.TrySpendStamina(hand.CurrentHold.HoldDrainPerSecond * drainMultiplier))
             {
                 ReleaseHand(hand);
@@ -566,6 +604,53 @@ namespace Rise
             }
 
             UpdateSlip(hand);
+        }
+
+        private void UpdateClimbExposure()
+        {
+            if (hasWon || IsRestLocked || Vitals == null)
+            {
+                return;
+            }
+
+            bool isHardClimbing = LeftHand.HasHold || RightHand.HasHold || body.linearVelocity.sqrMagnitude > 4f;
+            if (!isHardClimbing)
+            {
+                return;
+            }
+
+            climbExposureTimer += Time.deltaTime;
+            if (climbExposureTimer < climbExposureTickInterval)
+            {
+                return;
+            }
+
+            climbExposureTimer = 0f;
+            Vitals.ApplyClimbExposureTick(isHardClimbing, transform.position.y >= highAltitudeY);
+        }
+
+        private void UpdateFreeHandsStaminaRecovery(float deltaTime)
+        {
+            if (Vitals == null)
+            {
+                Vitals = GetComponent<PlayerVitals>();
+            }
+
+            if (hasWon || IsRestLocked || Vitals == null || LeftHand.HasHold || RightHand.HasHold)
+            {
+                freeHandsTimer = 0f;
+                return;
+            }
+
+            freeHandsTimer += Mathf.Max(0f, deltaTime);
+            float recoveryDelay = freeHandsStaminaRecoveryDelay > 0f ? freeHandsStaminaRecoveryDelay : DefaultFreeHandsStaminaRecoveryDelay;
+            if (freeHandsTimer < recoveryDelay)
+            {
+                return;
+            }
+
+            float recoveryPerSecond = freeHandsStaminaRecoveryPerSecond > 0f ? freeHandsStaminaRecoveryPerSecond : DefaultFreeHandsStaminaRecoveryPerSecond;
+            Vitals.RestoreStamina(recoveryPerSecond * deltaTime);
         }
 
         private void ApplyFootSupport()
@@ -813,7 +898,8 @@ namespace Rise
             }
 
             hand.SlipCheckTimer -= hand.CurrentHold.SlipCheckInterval;
-            if (Random.value <= hand.CurrentHold.SlipChance)
+            float slipChance = hand.CurrentHold.SlipChance;
+            if (Random.value <= slipChance)
             {
                 ClimbHold slippingHold = hand.CurrentHold;
                 Vector3 slipPoint = slippingHold.Position;
@@ -828,10 +914,53 @@ namespace Rise
             if (TryFindBestSurface(GetPromptTargetWorld(), out ClimbSurface surface, out _))
             {
                 string slip = surface.SlipChance > 0f ? "  slippery" : string.Empty;
-                return $"{surface.SurfaceLabel} surface  grab {surface.GrabCost:0.#}  drain {surface.HoldDrainPerSecond:0.#}/s{slip}";
+                return $"{surface.SurfaceLabel} surface  grab {surface.GrabCost * Vitals.GrabCostMultiplier:0.#}  drain {surface.HoldDrainPerSecond * Vitals.HoldDrainMultiplier:0.#}/s{slip}{BuildVitalPromptSuffix()}";
             }
 
-            return "Climb to the next hold";
+            return $"Climb to the next hold{BuildVitalPromptSuffix()}";
+        }
+
+        private Vector3 ApplySanityJitter(Vector3 target, HandState hand)
+        {
+            if (Vitals == null || !Vitals.LowSanity || hand.HasHold)
+            {
+                return target;
+            }
+
+            float strength = lowSanityAimJitter * (Vitals.Sanity <= 0.01f ? 1.75f : 1f);
+            float seed = hand.IsLeft ? 11.7f : 27.3f;
+            float x = Mathf.PerlinNoise(Time.time * 6f, seed) - 0.5f;
+            float y = Mathf.PerlinNoise(seed, Time.time * 6f) - 0.5f;
+            return target + new Vector3(x, y, 0f) * strength;
+        }
+
+        private float GetVitalSlipPenalty()
+        {
+            if (Vitals == null)
+            {
+                return 0f;
+            }
+
+            float penalty = 0f;
+            if (Vitals.LowHealth) penalty += 0.04f;
+            if (Vitals.LowWarmth) penalty += 0.03f;
+            if (Vitals.LowSanity) penalty += 0.025f;
+            return penalty;
+        }
+
+        private string BuildVitalPromptSuffix()
+        {
+            if (Vitals == null)
+            {
+                return string.Empty;
+            }
+
+            string suffix = string.Empty;
+            if (Vitals.LowHealth) suffix += "  injured";
+            if (Vitals.LowHunger) suffix += "  hungry";
+            if (Vitals.LowWarmth) suffix += "  cold";
+            if (Vitals.LowSanity) suffix += "  shaken";
+            return suffix;
         }
 
         private void RespawnAtCheckpoint()
@@ -987,11 +1116,13 @@ namespace Rise
             if (!IsRestLocked && !hasWon)
             {
                 bool isHoldingOrMovingHard = LeftHand.HasHold || RightHand.HasHold || body.linearVelocity.sqrMagnitude > 4f;
-                if (Vitals.LowStamina && isHoldingOrMovingHard)
+                bool lowLongTermResource = Vitals.LowHealth || Vitals.LowHunger || Vitals.LowWarmth || Vitals.LowSanity;
+                bool warningLongTermResource = Vitals.WarningHealth || Vitals.WarningHunger || Vitals.WarningWarmth || Vitals.WarningSanity;
+                if ((Vitals.LowStamina || lowLongTermResource) && isHoldingOrMovingHard)
                 {
                     nextCue = AudioCueId.BreathingHeavyLoop;
                 }
-                else if (isHoldingOrMovingHard)
+                else if (isHoldingOrMovingHard || warningLongTermResource)
                 {
                     nextCue = AudioCueId.BreathingLightLoop;
                 }

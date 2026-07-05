@@ -22,6 +22,7 @@ namespace Rise
         private Text smallPackLabel;
         private Text largePackLabel;
         private Text actionText;
+        private Text restMenuText;
         private RectTransform smallGridRoot;
         private RectTransform largeGridRoot;
         private GameObject inventoryPanel;
@@ -29,6 +30,7 @@ namespace Rise
         private GameObject hoverTooltip;
         private Text hoverTooltipText;
         private float detailTimer;
+        private string restFeedback;
         private bool showLargePack;
         private InventoryGrid selectedGrid;
         private InventoryItemStack selectedStack;
@@ -127,7 +129,8 @@ namespace Rise
 
                 if (keyboard.digit3Key.wasPressedThisFrame && rest.AllowsCooking)
                 {
-                    cooking.TryCook(0);
+                    cooking.TryCook(0, true);
+                    restFeedback = cooking.LastMessage;
                     ShowDetail(cooking.LastMessage);
                 }
 
@@ -218,6 +221,15 @@ namespace Rise
         {
             bool isResting = rest != null && rest.IsResting;
             restPanel.SetActive(isResting);
+            if (isResting)
+            {
+                RefreshRestPanel();
+            }
+            else
+            {
+                restFeedback = null;
+            }
+
             if (!isResting && showLargePack)
             {
                 showLargePack = false;
@@ -309,6 +321,11 @@ namespace Rise
             }
 
             ApplyConsumable(selectedStack.Definition);
+            if (controller != null)
+            {
+                AudioService.EnsureExists().Play3D(AudioCueId.ItemUse, controller.transform.position);
+            }
+
             selectedStack.Quantity--;
             if (selectedStack.Quantity <= 0)
             {
@@ -434,21 +451,12 @@ namespace Rise
 
         private void ApplyConsumable(InventoryItemDefinition definition)
         {
-            switch (definition.UseEffect)
+            if (controller == null || controller.Vitals == null)
             {
-                case InventoryUseEffect.RestoreHealth:
-                    controller.Vitals.RestoreByRecipe(definition.UseAmount, 0f, 0f, 0f);
-                    break;
-                case InventoryUseEffect.RestoreWarmth:
-                    controller.Vitals.RestoreByRecipe(0f, 0f, definition.UseAmount, 0f);
-                    break;
-                case InventoryUseEffect.RestoreSanity:
-                    controller.Vitals.RestoreByRecipe(0f, 0f, 0f, definition.UseAmount);
-                    break;
-                case InventoryUseEffect.RestoreHunger:
-                    controller.Vitals.RestoreByRecipe(0f, definition.UseAmount, 0f, 0f);
-                    break;
+                return;
             }
+
+            controller.Vitals.ApplyItemEffect(definition.UseEffect, definition.UseAmount);
         }
 
         private bool TryFindStackAtPointer(Vector2 screenPosition, out InventoryGrid grid, out InventoryItemStack stack)
@@ -822,8 +830,26 @@ namespace Rise
                 : CreatePanel("RestPanel", transform, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-18f, -30f), new Vector2(250f, 155f), new Color(0.08f, 0.07f, 0.05f, 0.88f)).gameObject;
             ConfigurePanelRect(restPanel, new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-18f, -30f), new Vector2(250f, 155f));
             ClearChildren(restPanel.transform);
-            CreateText("RestMenu", restPanel.transform, font, 15, new Vector2(14f, -16f), new Vector2(220f, 122f)).text = "Rest menu\n2 Organize pack\n3 Cook (long rest)\n4 Rest and recover\nEsc Exit";
+            restMenuText = CreateText("RestMenu", restPanel.transform, font, 13, new Vector2(14f, -12f), new Vector2(220f, 132f));
+            restMenuText.text = "Rest menu";
             restPanel.SetActive(false);
+        }
+
+        private void RefreshRestPanel()
+        {
+            if (restMenuText == null || rest == null || !rest.IsResting)
+            {
+                return;
+            }
+
+            RestPoint active = rest.ActiveRestPoint;
+            bool longRest = active != null && active.RestType == RestPointType.LongRest;
+            string title = longRest ? "Long rest" : "Short rest";
+            string cookLine = longRest ? "3 Cook meal" : "3 Cook locked";
+            string feedback = !string.IsNullOrEmpty(restFeedback)
+                ? restFeedback
+                : !string.IsNullOrEmpty(rest.LastRestMessage) ? rest.LastRestMessage : active != null ? active.DetailText : string.Empty;
+            restMenuText.text = $"{title}\n{rest.BuildRestPreview()}\n2 Organize pack\n{cookLine}\n4 Rest and recover\nEsc Exit\n{feedback}";
         }
 
         private T GetOrAddComponent<T>() where T : Component
