@@ -9,6 +9,8 @@ namespace Rise
     public sealed class StartMenuController : MonoBehaviour
     {
         private const string GameplaySceneName = "FinalPlayable";
+        private const string CoverResourcePath = "UI/Rise_Cover";
+        private const string TitleResourcePath = "UI/Rise_Title";
         private readonly RectTransform[] entranceItems = new RectTransform[6];
         private readonly CanvasGroup[] entranceGroups = new CanvasGroup[6];
 
@@ -59,6 +61,7 @@ namespace Rise
             ClearChildren(transform);
 
             Font font = ResolveFont();
+            CreateCoverBackground();
 
             Image shade = CreatePanel("LeftShade", transform, new Vector2(0f, 0f), new Vector2(0f, 1f), new Vector2(0f, 0f), new Vector2(560f, 0f));
             shade.color = new Color(0.025f, 0.035f, 0.045f, 0.9f);

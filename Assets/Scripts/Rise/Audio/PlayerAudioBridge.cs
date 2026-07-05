@@ -9,12 +9,14 @@ namespace Rise
         [SerializeField] private Vector3 breathingOffset = new Vector3(0f, 1.2f, 0f);
 
         private PlayerClimbController controller;
+        private ToolController toolController;
         private AudioPlaybackHandle breathingHandle;
         private AudioCueId activeBreathingCue = AudioCueId.None;
 
         private void Awake()
         {
             controller = GetComponent<PlayerClimbController>();
+            toolController = GetComponent<ToolController>();
             if (breathingAnchor == null)
             {
                 breathingAnchor = transform;
@@ -28,40 +30,51 @@ namespace Rise
                 controller = GetComponent<PlayerClimbController>();
             }
 
-            if (controller == null)
+            if (toolController == null)
             {
-                return;
+                toolController = GetComponent<ToolController>();
             }
 
-            controller.GrabSuccess += OnGrabSuccess;
-            controller.GrabFailed += OnGrabFailed;
-            controller.SlipOccurred += OnSlipOccurred;
-            controller.KickPerformed += OnKickPerformed;
-            controller.RestStarted += OnRestStarted;
-            controller.RestCompleted += OnRestCompleted;
-            controller.Respawned += OnRespawned;
-            controller.GoalReached += OnGoalReached;
-            controller.HoldReleased += OnHoldReleased;
-            controller.BreathingStateChanged += OnBreathingStateChanged;
+            if (controller != null)
+            {
+                controller.GrabSuccess += OnGrabSuccess;
+                controller.GrabFailed += OnGrabFailed;
+                controller.SlipOccurred += OnSlipOccurred;
+                controller.KickPerformed += OnKickPerformed;
+                controller.RestStarted += OnRestStarted;
+                controller.RestCompleted += OnRestCompleted;
+                controller.Respawned += OnRespawned;
+                controller.GoalReached += OnGoalReached;
+                controller.HoldReleased += OnHoldReleased;
+                controller.BreathingStateChanged += OnBreathingStateChanged;
+            }
+
+            if (toolController != null)
+            {
+                toolController.ToolPlaced += OnToolPlaced;
+            }
         }
 
         private void OnDisable()
         {
-            if (controller == null)
+            if (controller != null)
             {
-                return;
+                controller.GrabSuccess -= OnGrabSuccess;
+                controller.GrabFailed -= OnGrabFailed;
+                controller.SlipOccurred -= OnSlipOccurred;
+                controller.KickPerformed -= OnKickPerformed;
+                controller.RestStarted -= OnRestStarted;
+                controller.RestCompleted -= OnRestCompleted;
+                controller.Respawned -= OnRespawned;
+                controller.GoalReached -= OnGoalReached;
+                controller.HoldReleased -= OnHoldReleased;
+                controller.BreathingStateChanged -= OnBreathingStateChanged;
             }
 
-            controller.GrabSuccess -= OnGrabSuccess;
-            controller.GrabFailed -= OnGrabFailed;
-            controller.SlipOccurred -= OnSlipOccurred;
-            controller.KickPerformed -= OnKickPerformed;
-            controller.RestStarted -= OnRestStarted;
-            controller.RestCompleted -= OnRestCompleted;
-            controller.Respawned -= OnRespawned;
-            controller.GoalReached -= OnGoalReached;
-            controller.HoldReleased -= OnHoldReleased;
-            controller.BreathingStateChanged -= OnBreathingStateChanged;
+            if (toolController != null)
+            {
+                toolController.ToolPlaced -= OnToolPlaced;
+            }
         }
 
         private void OnGrabSuccess(HandState hand, ClimbHold hold, ClimbSurface surface, Vector3 point)
@@ -144,6 +157,12 @@ namespace Rise
             }
 
             breathingHandle = service.PlayAttached(cueId, breathingAnchor, breathingOffset);
+        }
+
+        private void OnToolPlaced(ToolKind toolKind, Vector3 position)
+        {
+            AudioCueId cueId = toolKind == ToolKind.Anchor ? AudioCueId.AnchorPlace : AudioCueId.RopePlace;
+            AudioService.EnsureExists().Play3D(cueId, position);
         }
     }
 }
