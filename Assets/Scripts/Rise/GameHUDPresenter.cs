@@ -613,30 +613,6 @@ namespace Rise
             staminaFillRect.offsetMin = Vector2.zero;
         }
 
-        private void AnimateStaminaFillAmount(float stamina01)
-        {
-            if (Mathf.Approximately(targetStamina01, stamina01))
-            {
-                return;
-            }
-
-            targetStamina01 = stamina01;
-            staminaFillTween?.Kill();
-
-            float startValue = displayedStamina01;
-            staminaFillTween = DOTween.To(
-                    () => startValue,
-                    value =>
-                    {
-                        displayedStamina01 = value;
-                        SetStaminaFillAmount(value);
-                    },
-                    stamina01,
-                    StaminaTweenDuration)
-                .SetEase(Ease.OutQuad)
-                .SetUpdate(true);
-        }
-
         private static Color GetStaminaFillColor(float stamina01)
         {
             Color low = new Color(0.95f, 0.16f, 0.10f, 1f);
