@@ -8,6 +8,8 @@ namespace Rise
         [SerializeField] private Transform visualRoot;
         [SerializeField] private Transform hips;
         [SerializeField] private Transform chest;
+        [SerializeField] private Transform neck;
+        [SerializeField] private Transform head;
         [SerializeField] private Transform leftUpperArm;
         [SerializeField] private Transform leftLowerArm;
         [SerializeField] private Transform leftHandBone;
@@ -28,6 +30,15 @@ namespace Rise
         [SerializeField] private float modelScale = 0.65f;
         [SerializeField] private float poseBlendSpeed = 9f;
         [SerializeField] private float visualPlaneZ = -0.18f;
+
+        [Header("Posture Balance")]
+        [SerializeField] private float climbHipCurl = -1.5f;
+        [SerializeField] private float climbChestCurl = -2.5f;
+        [SerializeField] private float maxTorsoSideLean = 10f;
+        [SerializeField] private float maxChestReachTwist = 0.75f;
+        [SerializeField] private bool preventInvertedPosture = true;
+        [SerializeField] private float minHeadAboveHips = 0.1f;
+
         [SerializeField] private float handMarkerSize = 0.18f;
         [SerializeField] private float freeHandMarkerSize = 0.1f;
         [SerializeField] private bool showHandDebugPoints = true;
@@ -48,6 +59,8 @@ namespace Rise
         private PlayerClimbController controller;
         private Quaternion hipsInitialLocalRotation;
         private Quaternion chestInitialLocalRotation;
+        private Quaternion neckInitialLocalRotation;
+        private Quaternion headInitialLocalRotation;
         private Quaternion leftUpperArmInitialLocalRotation;
         private Quaternion leftLowerArmInitialLocalRotation;
         private Quaternion rightUpperArmInitialLocalRotation;
@@ -120,20 +133,24 @@ namespace Rise
             bool hasHold = controller.LeftHand.HasHold || controller.RightHand.HasHold;
             climbPose = Mathf.MoveTowards(climbPose, hasHold ? 1f : 0f, Time.deltaTime * poseBlendSpeed);
             restPose = Mathf.MoveTowards(restPose, 0f, Time.deltaTime * poseBlendSpeed);
+            float sideSway = Mathf.Clamp(tilt * 0.45f, -maxTorsoSideLean, maxTorsoSideLean) * climbPose;
+            float reachTwist = Mathf.Clamp((controller.RightHand.WorldTarget.y - controller.LeftHand.WorldTarget.y) * 0.2f, -maxChestReachTwist, maxChestReachTwist) * climbPose;
+            float hipPitch = Mathf.Lerp(0f, climbHipCurl, climbPose) + restPose * 1.5f;
+            float chestPitch = Mathf.Lerp(0f, climbChestCurl, climbPose);
 
             if (hips != null)
             {
-                float bodySwing = Mathf.Clamp(controller.BodyVelocity.x * 3f, -10f, 10f);
                 hips.localRotation = hipsInitialLocalRotation *
-                                     Quaternion.Euler(Mathf.Lerp(0f, -8f, climbPose) + restPose * 6f, 0f, bodySwing);
+                                     Quaternion.Euler(hipPitch, 0f, sideSway * 0.4f);
             }
 
             if (chest != null)
             {
-                float reachTwist = Mathf.Clamp((controller.RightHand.WorldTarget.y - controller.LeftHand.WorldTarget.y) * 5f, -12f, 12f) * climbPose;
                 chest.localRotation = chestInitialLocalRotation *
-                                      Quaternion.Euler(Mathf.Lerp(0f, -12f, climbPose) + tilt * 0.35f, 0f, tilt + reachTwist);
+                                      Quaternion.Euler(chestPitch, 0f, sideSway * 0.6f + reachTwist);
             }
+
+            KeepHeadAndNeckUpright();
 
             Vector3 leftHandTarget = ToVisualPlane(controller.LeftHand.WorldTarget + leftHandTargetOffset);
             Vector3 rightHandTarget = ToVisualPlane(controller.RightHand.WorldTarget + rightHandTargetOffset);
@@ -144,6 +161,7 @@ namespace Rise
 
             AnimateLeg(leftUpperLeg, leftLowerLeg, leftUpperLegInitialLocalRotation, leftLowerLegInitialLocalRotation, true, controller.LeftKickVisual);
             AnimateLeg(rightUpperLeg, rightLowerLeg, rightUpperLegInitialLocalRotation, rightLowerLegInitialLocalRotation, false, controller.RightKickVisual);
+            PreventInvertedPostureIfNeeded();
             ReportVisibleHandPoint(controller.LeftHand, leftHandBone);
             ReportVisibleHandPoint(controller.RightHand, rightHandBone);
             UpdateHandStateVisual(controller.LeftHand, leftMarker, leftMarkerMaterial, leftHandBone, leftHandTarget);
@@ -164,6 +182,8 @@ namespace Rise
 
             if (hips != null) hipsInitialLocalRotation = hips.localRotation;
             if (chest != null) chestInitialLocalRotation = chest.localRotation;
+            if (neck != null) neckInitialLocalRotation = neck.localRotation;
+            if (head != null) headInitialLocalRotation = head.localRotation;
             if (leftUpperArm != null) leftUpperArmInitialLocalRotation = leftUpperArm.localRotation;
             if (leftLowerArm != null) leftLowerArmInitialLocalRotation = leftLowerArm.localRotation;
             if (rightUpperArm != null) rightUpperArmInitialLocalRotation = rightUpperArm.localRotation;
@@ -198,6 +218,8 @@ namespace Rise
 
             hips ??= FindDeepChild(visualRoot, "hips");
             chest ??= FindDeepChild(visualRoot, "chest");
+            neck ??= FindFirstDeepChild(visualRoot, "neck", "Neck");
+            head ??= FindFirstDeepChild(visualRoot, "head", "Head");
             leftUpperArm ??= FindDeepChild(visualRoot, "upper_arm.L");
             leftLowerArm ??= FindDeepChild(visualRoot, "lower_arm.L");
             leftHandBone ??= FindDeepChild(visualRoot, "lower_arm.L.001");
@@ -208,6 +230,42 @@ namespace Rise
             leftLowerLeg ??= FindDeepChild(visualRoot, "lower_leg.L");
             rightUpperLeg ??= FindDeepChild(visualRoot, "upper_leg.R");
             rightLowerLeg ??= FindDeepChild(visualRoot, "lower_leg.R");
+        }
+
+        private void KeepHeadAndNeckUpright()
+        {
+            if (neck != null)
+            {
+                neck.localRotation = neckInitialLocalRotation;
+            }
+
+            if (head != null)
+            {
+                head.localRotation = headInitialLocalRotation;
+            }
+        }
+
+        private void PreventInvertedPostureIfNeeded()
+        {
+            if (!preventInvertedPosture || head == null || hips == null)
+            {
+                return;
+            }
+
+            if (head.position.y >= hips.position.y + minHeadAboveHips)
+            {
+                return;
+            }
+
+            ResetCorePosture();
+        }
+
+        private void ResetCorePosture()
+        {
+            if (hips != null) hips.localRotation = hipsInitialLocalRotation;
+            if (chest != null) chest.localRotation = chestInitialLocalRotation;
+            if (neck != null) neck.localRotation = neckInitialLocalRotation;
+            if (head != null) head.localRotation = headInitialLocalRotation;
         }
 
         private static void AimArmBones(Transform upperArm, Transform lowerArm, Transform handBone, Quaternion upperInitial, Quaternion lowerInitial, Vector3 target, bool isLeft)
@@ -308,15 +366,16 @@ namespace Rise
             }
 
             float side = left ? -1f : 1f;
-            float idleSwing = Mathf.Sin(Time.time * 3.2f + (left ? 0f : Mathf.PI)) * 4f * (1f - climbPose);
-            float climbBend = Mathf.Lerp(7f, 46f, climbPose);
+            float naturalSwing = Mathf.Sin(Time.time * 3.2f + (left ? 0f : Mathf.PI)) * Mathf.Lerp(4f, 2.5f, climbPose);
+            float climbBend = Mathf.Lerp(7f, 12f, climbPose);
             float kickLift = kick * -54f;
             float kickSplay = kick * side * -24f;
-            upperLeg.localRotation = upperInitial * Quaternion.Euler(kickLift - climbBend, 0f, idleSwing + side * 18f * climbPose + kickSplay);
+            upperLeg.localRotation = upperInitial * Quaternion.Euler(kickLift - climbBend, 0f, naturalSwing + side * 10f * climbPose + kickSplay);
 
             if (lowerLeg != null)
             {
-                lowerLeg.localRotation = lowerInitial * Quaternion.Euler(Mathf.Lerp(0f, 42f, climbPose) + kick * 48f, 0f, side * -7f * climbPose);
+                float lowerSwing = Mathf.Sin(Time.time * 3.2f + (left ? Mathf.PI : 0f)) * 1.8f * climbPose;
+                lowerLeg.localRotation = lowerInitial * Quaternion.Euler(Mathf.Lerp(0f, 14f, climbPose) + kick * 48f, 0f, lowerSwing + side * -4f * climbPose);
             }
         }
 
@@ -539,6 +598,20 @@ namespace Rise
                 if (result != null)
                 {
                     return result;
+                }
+            }
+
+            return null;
+        }
+
+        private static Transform FindFirstDeepChild(Transform root, params string[] targetNames)
+        {
+            for (int i = 0; i < targetNames.Length; i++)
+            {
+                Transform found = FindDeepChild(root, targetNames[i]);
+                if (found != null)
+                {
+                    return found;
                 }
             }
 

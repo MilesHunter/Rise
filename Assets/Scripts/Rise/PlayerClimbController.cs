@@ -48,6 +48,10 @@ namespace Rise
         [SerializeField] private float freeHandsStaminaRecoveryDelay = DefaultFreeHandsStaminaRecoveryDelay;
         [SerializeField] private float freeHandsStaminaRecoveryPerSecond = DefaultFreeHandsStaminaRecoveryPerSecond;
         [SerializeField] private float ropeHandFeedbackStrength = 0.35f;
+        [SerializeField] private float capsuleHeight = 1.9f;
+        [SerializeField] private float capsuleRadius = 0.35f;
+        [SerializeField] private Vector3 capsuleCenter = new Vector3(0f, 0.95f, 0f);
+        [SerializeField] private Vector3 centerOfMass = new Vector3(0f, 0.85f, 0f);
 
         private Rigidbody body;
         private Camera mainCamera;
@@ -861,6 +865,8 @@ namespace Rise
             Vector3 position = body.position;
             position.z = movePlaneZ;
             body.position = position;
+            body.rotation = Quaternion.identity;
+            transform.rotation = Quaternion.identity;
 
             if (body.isKinematic)
             {
@@ -962,12 +968,12 @@ namespace Rise
 
         private ClimbHold CreateSurfaceGrip(Vector3 targetWorld)
         {
-            if (!TryFindBestSurface(targetWorld, out ClimbSurface bestSurface, out _))
+            if (!TryFindBestSurface(targetWorld, out ClimbSurface bestSurface, out Vector3 bestPoint))
             {
                 return null;
             }
 
-            return CreateRuntimeGrip("RuntimeSurfaceGrip", targetWorld, ClimbHoldType.Normal,
+            return CreateRuntimeGrip("RuntimeSurfaceGrip", bestPoint, ClimbHoldType.Normal,
                 bestSurface.AllowAnchorAttach,
                 bestSurface.AllowRopeAttach,
                 bestSurface.GrabCost,
@@ -1175,14 +1181,16 @@ namespace Rise
 
         private Vector3 GetHandGrabProbeWorld(HandState hand)
         {
-            Vector3 probe = hand.HasVisibleWorldPoint ? hand.VisibleWorldPoint : hand.WorldTarget;
+            Vector3 probe = hand.WorldTarget;
             probe.z = movePlaneZ;
             return probe;
         }
 
         private Vector3 GetHoldForceAnchorWorld(HandState hand)
         {
-            return hand.HasVisibleWorldPoint ? GetHandGrabProbeWorld(hand) : transform.position + hand.LocalAnchorOffset;
+            Vector3 anchor = transform.position + hand.LocalAnchorOffset;
+            anchor.z = movePlaneZ;
+            return anchor;
         }
 
         private Vector3 GetDesiredAnchorWorld(HandState hand)
@@ -1240,6 +1248,7 @@ namespace Rise
         private void EnsureInitialized(Transform generatedRoot)
         {
             body = GetComponent<Rigidbody>();
+            NormalizePhysicsBody();
             Vitals = GetComponent<PlayerVitals>();
             Tools = GetComponent<ToolController>();
             restSession = GetComponent<RestSessionController>();
@@ -1260,6 +1269,24 @@ namespace Rise
                 bodyDriveOffset = Vector3.zero;
                 ResetFreeHandTargets();
                 initialized = true;
+            }
+        }
+
+        private void NormalizePhysicsBody()
+        {
+            CapsuleCollider capsule = GetComponent<CapsuleCollider>();
+            if (capsule != null)
+            {
+                capsule.direction = 1;
+                capsule.height = capsuleHeight;
+                capsule.radius = capsuleRadius;
+                capsule.center = capsuleCenter;
+            }
+
+            if (body != null)
+            {
+                body.centerOfMass = centerOfMass;
+                body.inertiaTensorRotation = Quaternion.identity;
             }
         }
 
