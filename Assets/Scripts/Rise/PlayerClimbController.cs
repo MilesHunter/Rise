@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 using Random = UnityEngine.Random;
 
 namespace Rise
@@ -54,6 +55,7 @@ namespace Rise
         [SerializeField] private float capsuleRadius = 0.35f;
         [SerializeField] private Vector3 capsuleCenter = new Vector3(0f, 0.95f, 0f);
         [SerializeField] private Vector3 centerOfMass = new Vector3(0f, 0.85f, 0f);
+        [SerializeField] private float levelResetHoldDuration = 1.5f;
 
         private Rigidbody body;
         private Camera mainCamera;
@@ -66,11 +68,13 @@ namespace Rise
         private bool hasWon;
         private bool initialized;
         private bool restFrozen;
+        private bool levelResetRequested;
         private AudioCueId activeBreathingCue;
         private bool cursorLocked;
         private RestSessionController restSession;
         private float climbExposureTimer;
         private float freeHandsTimer;
+        private float levelResetHoldTimer;
         private CapsuleCollider bodyCollider;
         private bool upwardClimbCollisionBypassActive;
         private readonly List<Collider> ignoredUpwardClimbColliders = new List<Collider>();
@@ -142,6 +146,7 @@ namespace Rise
             UpdateFreeHandsStaminaRecovery(Time.deltaTime);
             if (restFrozen)
             {
+                UpdateLevelResetInput();
                 UpdateBreathingState();
                 Tools.UpdateRuntime();
                 return;
@@ -154,6 +159,7 @@ namespace Rise
             UpdateResourceInput();
             UpdateRestInput();
             UpdatePrompt();
+            UpdateLevelResetInput();
             UpdateClimbExposure();
             DecayKickVisuals();
             UpdateBreathingState();
@@ -513,6 +519,59 @@ namespace Rise
                 }
 
                 restRoutine = StartCoroutine(PerformRest(currentRestPoint));
+            }
+        }
+
+        private void UpdateLevelResetInput()
+        {
+            if (levelResetRequested || Keyboard.current == null)
+            {
+                return;
+            }
+
+            if (!Keyboard.current.rKey.isPressed)
+            {
+                levelResetHoldTimer = 0f;
+                return;
+            }
+
+            levelResetHoldTimer += Time.unscaledDeltaTime;
+            float duration = Mathf.Max(0.1f, levelResetHoldDuration);
+            float progress = Mathf.Clamp01(levelResetHoldTimer / duration);
+            CurrentPrompt = $"Hold R to reset level {Mathf.RoundToInt(progress * 100f)}%";
+
+            if (levelResetHoldTimer >= duration)
+            {
+                levelResetRequested = true;
+                CurrentPrompt = "Resetting level";
+                StartCoroutine(ReloadCurrentLevel());
+            }
+        }
+
+        private IEnumerator ReloadCurrentLevel()
+        {
+            Scene activeScene = SceneManager.GetActiveScene();
+            AsyncOperation operation = activeScene.buildIndex >= 0
+                ? SceneManager.LoadSceneAsync(activeScene.buildIndex, LoadSceneMode.Single)
+                : SceneManager.LoadSceneAsync(activeScene.name, LoadSceneMode.Single);
+
+            if (operation == null)
+            {
+                if (activeScene.buildIndex >= 0)
+                {
+                    SceneManager.LoadScene(activeScene.buildIndex, LoadSceneMode.Single);
+                }
+                else
+                {
+                    SceneManager.LoadScene(activeScene.name, LoadSceneMode.Single);
+                }
+
+                yield break;
+            }
+
+            while (!operation.isDone)
+            {
+                yield return null;
             }
         }
 
