@@ -119,7 +119,7 @@ namespace Rise
             float tilt = Mathf.Clamp(horizontalVelocity * -7f, -18f, 18f);
             bool hasHold = controller.LeftHand.HasHold || controller.RightHand.HasHold;
             climbPose = Mathf.MoveTowards(climbPose, hasHold ? 1f : 0f, Time.deltaTime * poseBlendSpeed);
-            restPose = Mathf.MoveTowards(restPose, controller.BodyVelocity.sqrMagnitude < 0.001f && !hasHold ? 0.25f : 0f, Time.deltaTime * poseBlendSpeed);
+            restPose = Mathf.MoveTowards(restPose, 0f, Time.deltaTime * poseBlendSpeed);
 
             if (hips != null)
             {
@@ -130,7 +130,7 @@ namespace Rise
 
             if (chest != null)
             {
-                float reachTwist = Mathf.Clamp((controller.RightHand.WorldTarget.y - controller.LeftHand.WorldTarget.y) * 5f, -12f, 12f);
+                float reachTwist = Mathf.Clamp((controller.RightHand.WorldTarget.y - controller.LeftHand.WorldTarget.y) * 5f, -12f, 12f) * climbPose;
                 chest.localRotation = chestInitialLocalRotation *
                                       Quaternion.Euler(Mathf.Lerp(0f, -12f, climbPose) + tilt * 0.35f, 0f, tilt + reachTwist);
             }
