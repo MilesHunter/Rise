@@ -945,6 +945,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   visualRoot: {fileID: 0}
+  hips: {fileID: 0}
   chest: {fileID: 0}
   leftUpperArm: {fileID: 0}
   leftLowerArm: {fileID: 0}
@@ -953,12 +954,22 @@ MonoBehaviour:
   rightLowerArm: {fileID: 0}
   rightHandBone: {fileID: 0}
   leftUpperLeg: {fileID: 0}
+  leftLowerLeg: {fileID: 0}
   rightUpperLeg: {fileID: 0}
+  rightLowerLeg: {fileID: 0}
   rootFollowOffset: {x: 0, y: -0.95, z: 0}
   leftHandTargetOffset: {x: 0, y: 0, z: 0}
   rightHandTargetOffset: {x: 0, y: 0, z: 0}
   leftHandRotationOffset: {x: 0, y: 0, z: -90}
   rightHandRotationOffset: {x: 0, y: 0, z: -90}
+  modelScale: 0.65
+  poseBlendSpeed: 9
+  visualPlaneZ: -0.18
+  handMarkerSize: 0.18
+  freeHandMarkerSize: 0.1
+  idleHandColor: {r: 0.7, g: 0.72, b: 0.75, a: 0.85}
+  reachingHandColor: {r: 1, g: 0.78, b: 0.2, a: 1}
+  grippingHandColor: {r: 0.25, g: 1, b: 0.42, a: 1}
 --- !u!1 &330585543
 GameObject:
   m_ObjectHideFlags: 0
@@ -1019,7 +1030,7 @@ Camera:
     width: 1
     height: 1
   near clip plane: 0.3
-  far clip plane: 1000
+  far clip plane: 50
   field of view: 60
   orthographic: 0
   orthographic size: 5
@@ -1047,7 +1058,7 @@ Transform:
   m_GameObject: {fileID: 330585543}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -1.2, y: 2.5, z: -13}
+  m_LocalPosition: {x: 0, y: 0, z: -8}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
